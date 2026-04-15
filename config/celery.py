@@ -2,8 +2,9 @@
 
 import os
 
-from celery import Celery
 from celery.schedules import crontab
+
+from celery import Celery
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.development")
 
@@ -54,4 +55,4 @@ app.conf.beat_schedule = {
 @app.task(bind=True, ignore_result=True)
 def debug_task(self) -> None:  # type: ignore[override]
     """Task de debug para verificar se o Celery está funcionando."""
-    print(f"Request: {self.request!r}")
+    print(f"Request: {self.request!r}")  # noqa: T201

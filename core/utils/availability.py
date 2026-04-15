@@ -25,7 +25,7 @@ type SlotList = list[datetime.datetime]
 
 
 def get_available_slots(
-    provider: "ProviderProfile",
+    provider: ProviderProfile,
     service_duration: int,
     buffer_after: int,
     date: datetime.date,
@@ -43,7 +43,6 @@ def get_available_slots(
     6. Remove slots no passado e dentro do min_notice_hours do prestador
     7. Remove slots além de max_advance_days
     """
-    from apps.providers.models import WorkingHours
 
     # 1. Obter horário de funcionamento para o dia da semana
     weekday = date.weekday()  # 0=Segunda … 6=Domingo
@@ -73,7 +72,9 @@ def get_available_slots(
     available = _filter_by_blocks(raw_slots, blocks, service_duration)
 
     # 4. Filtrar por agendamentos existentes (com buffer)
-    available = _filter_by_appointments(available, provider, staff, date, service_duration, buffer_after)
+    available = _filter_by_appointments(
+        available, provider, staff, date, service_duration, buffer_after
+    )
 
     # 5. Remover slots no passado e dentro do min_notice_hours
     now = timezone.now()
@@ -89,10 +90,10 @@ def get_available_slots(
 
 
 def _get_working_hours(
-    provider: "ProviderProfile",
+    provider: ProviderProfile,
     staff: object | None,
     weekday: int,
-) -> "WorkingHours | None":
+) -> WorkingHours | None:
     """
     Retorna o horário de funcionamento mais específico para o dia.
     Profissional sobrescreve estabelecimento.
@@ -147,26 +148,23 @@ def _generate_slots(
 
 
 def _get_blocks_for_day(
-    provider: "ProviderProfile",
+    provider: ProviderProfile,
     staff: object | None,
     date: datetime.date,
-) -> list["ScheduleBlock"]:
+) -> list[ScheduleBlock]:
     """
     Retorna bloqueios que afetam o dia, incluindo recorrentes (via RRULE).
     """
     from apps.providers.models import ScheduleBlock
 
-    day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.timezone.utc)
-    day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.timezone.utc)
+    day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.UTC)
+    day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.UTC)
 
     # Bloqueios pontuais que interceptam o dia
     qs = ScheduleBlock.objects.filter(provider=provider)
-    if staff is not None:
-        qs = qs.filter(staff=staff)
-    else:
-        qs = qs.filter(staff__isnull=True)
+    qs = qs.filter(staff=staff) if staff is not None else qs.filter(staff__isnull=True)
 
-    active_blocks: list["ScheduleBlock"] = []
+    active_blocks: list[ScheduleBlock] = []
 
     # Bloqueios não-recorrentes que sobrepõem o dia
     non_recurring = qs.filter(
@@ -185,7 +183,7 @@ def _get_blocks_for_day(
     return active_blocks
 
 
-def _rrule_has_occurrence_on_day(block: "ScheduleBlock", date: datetime.date) -> bool:
+def _rrule_has_occurrence_on_day(block: ScheduleBlock, date: datetime.date) -> bool:
     """
     Verifica se um bloqueio recorrente tem ocorrência no dia especificado.
     Usa python-dateutil para processar RRULE RFC 5545.
@@ -199,8 +197,8 @@ def _rrule_has_occurrence_on_day(block: "ScheduleBlock", date: datetime.date) ->
             block.recurrence_rule,
             dtstart=block.start_datetime,
         )
-        day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.timezone.utc)
-        day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.timezone.utc)
+        day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.UTC)
+        day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.UTC)
 
         # Ajustar busca para cobrir início das ocorrências que podem se estender ao dia
         search_start = day_start - duration
@@ -217,7 +215,7 @@ def _rrule_has_occurrence_on_day(block: "ScheduleBlock", date: datetime.date) ->
 
 def _filter_by_blocks(
     slots: SlotList,
-    blocks: list["ScheduleBlock"],
+    blocks: list[ScheduleBlock],
     duration_minutes: int,
 ) -> SlotList:
     """
@@ -233,8 +231,7 @@ def _filter_by_blocks(
     for slot in slots:
         slot_end = slot + duration
         collides = any(
-            slot < block.end_datetime and slot_end > block.start_datetime
-            for block in blocks
+            slot < block.end_datetime and slot_end > block.start_datetime for block in blocks
         )
         if not collides:
             available.append(slot)
@@ -244,7 +241,7 @@ def _filter_by_blocks(
 
 def _filter_by_appointments(
     slots: SlotList,
-    provider: "ProviderProfile",
+    provider: ProviderProfile,
     staff: object | None,
     date: datetime.date,
     duration_minutes: int,
@@ -262,8 +259,8 @@ def _filter_by_appointments(
         # App appointments ainda não implementado
         return slots
 
-    day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.timezone.utc)
-    day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.timezone.utc)
+    day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.UTC)
+    day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.UTC)
 
     appointments_qs = Appointment.objects.filter(
         provider=provider,
@@ -291,8 +288,7 @@ def _filter_by_appointments(
     for slot in slots:
         slot_end = slot + duration
         collides = any(
-            slot < busy_end and slot_end > busy_start
-            for busy_start, busy_end in busy_periods
+            slot < busy_end and slot_end > busy_start for busy_start, busy_end in busy_periods
         )
         if not collides:
             available.append(slot)

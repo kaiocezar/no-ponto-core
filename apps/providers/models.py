@@ -58,12 +58,8 @@ class ProviderProfile(models.Model):
     address_city = models.CharField(max_length=200, blank=True)
     address_state = models.CharField(max_length=200, blank=True)
     address_zip = models.CharField(max_length=10, blank=True)
-    address_lat = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
-    address_lng = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
+    address_lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    address_lng = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
 
     # Configurações de agendamento
     timezone = models.CharField(max_length=50, default="America/Sao_Paulo")
@@ -91,6 +87,31 @@ class ProviderProfile(models.Model):
 
     def __str__(self) -> str:
         return self.business_name or str(self.user)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        slug_changed = False
+        if not self.slug:
+            if self.business_name:
+                self.slug = self.generate_unique_slug(self.business_name)
+            else:
+                # Slug temporário baseado em UUID para perfis sem business_name ainda
+                import uuid as _uuid
+
+                self.slug = f"perfil-{str(_uuid.uuid4())[:8]}"
+            slug_changed = True
+        elif self.business_name and self.slug.startswith("perfil-"):
+            # Slug temporário presente — regera com o business_name atual
+            self.slug = self.generate_unique_slug(self.business_name)
+            slug_changed = True
+
+        # Garante que slug é persistido mesmo quando update_fields está presente
+        if slug_changed and "update_fields" in kwargs:
+            update_fields = list(kwargs["update_fields"])  # type: ignore[arg-type]
+            if "slug" not in update_fields:
+                update_fields.append("slug")
+            kwargs["update_fields"] = update_fields
+
+        super().save(*args, **kwargs)
 
     @classmethod
     def generate_unique_slug(
@@ -125,11 +146,6 @@ class ProviderProfile(models.Model):
             counter += 1
 
         return candidate
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        if not self.slug and self.business_name:
-            self.slug = self.generate_unique_slug(self.business_name)
-        super().save(*args, **kwargs)
 
 
 class WorkingHours(models.Model):
@@ -183,7 +199,7 @@ class WorkingHours(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.get_weekday_display()} {self.start_time}–{self.end_time}"
+        return f"{self.get_weekday_display()} {self.start_time}-{self.end_time}"
 
 
 class ScheduleBlock(models.Model):
