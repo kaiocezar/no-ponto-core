@@ -130,3 +130,96 @@ class ProviderProfile(models.Model):
         if not self.slug and self.business_name:
             self.slug = self.generate_unique_slug(self.business_name)
         super().save(*args, **kwargs)
+
+
+class WorkingHours(models.Model):
+    """Horário de funcionamento de um prestador ou profissional."""
+
+    WEEKDAY_CHOICES = [
+        (0, "Segunda-feira"),
+        (1, "Terça-feira"),
+        (2, "Quarta-feira"),
+        (3, "Quinta-feira"),
+        (4, "Sexta-feira"),
+        (5, "Sábado"),
+        (6, "Domingo"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        ProviderProfile,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="working_hours",
+    )
+    staff = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="working_hours",
+    )
+    weekday = models.SmallIntegerField(choices=WEEKDAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_working_hours"
+        verbose_name = "Horário de Funcionamento"
+        verbose_name_plural = "Horários de Funcionamento"
+        indexes = [
+            models.Index(fields=["provider", "weekday", "is_active"]),
+            models.Index(fields=["staff", "weekday", "is_active"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(start_time__lt=models.F("end_time")),
+                name="working_hours_start_before_end",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_weekday_display()} {self.start_time}–{self.end_time}"
+
+
+class ScheduleBlock(models.Model):
+    """Bloqueio de agenda — período em que o prestador/profissional não atende."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        ProviderProfile,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="schedule_blocks",
+    )
+    staff = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="schedule_blocks",
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    reason = models.CharField(max_length=500, blank=True)
+    is_recurring = models.BooleanField(default=False)
+    recurrence_rule = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_schedule_block"
+        verbose_name = "Bloqueio de Agenda"
+        verbose_name_plural = "Bloqueios de Agenda"
+        indexes = [
+            models.Index(fields=["provider", "start_datetime", "end_datetime"]),
+            models.Index(fields=["staff", "start_datetime", "end_datetime"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Bloqueio {self.start_datetime} → {self.end_datetime}"
