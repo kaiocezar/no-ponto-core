@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
 
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -35,9 +34,7 @@ class WorkingHoursListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         provider = self._get_provider(request)
-        qs = WorkingHours.objects.filter(
-            provider=provider, staff__isnull=True
-        ).order_by("weekday")
+        qs = WorkingHours.objects.filter(provider=provider, staff__isnull=True).order_by("weekday")
         serializer = WorkingHoursSerializer(qs, many=True)
         return Response(serializer.data)
 
@@ -187,7 +184,12 @@ class ProviderAvailabilityView(APIView):
 
         if not service_id or not date_str:
             return Response(
-                {"error": {"code": "VALIDATION_ERROR", "message": "service_id e date são obrigatórios."}},
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "service_id e date são obrigatórios.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -195,13 +197,19 @@ class ProviderAvailabilityView(APIView):
             date = datetime.date.fromisoformat(date_str)
         except ValueError:
             return Response(
-                {"error": {"code": "VALIDATION_ERROR", "message": "Formato de data inválido. Use YYYY-MM-DD."}},
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Formato de data inválido. Use YYYY-MM-DD.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Obter serviço para pegar duração e buffer
         try:
             from apps.services.models import Service
+
             service = Service.objects.get(pk=service_id, provider=provider, is_active=True)
             service_duration = service.duration_minutes
             buffer_after = service.buffer_after
@@ -214,11 +222,12 @@ class ProviderAvailabilityView(APIView):
         # Resolver staff se fornecido
         staff = None
         if staff_id:
+            import contextlib
+
             from apps.accounts.models import User
-            try:
+
+            with contextlib.suppress(User.DoesNotExist):
                 staff = User.objects.get(pk=staff_id)
-            except User.DoesNotExist:
-                pass
 
         from core.utils.availability import get_available_slots
 

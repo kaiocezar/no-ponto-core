@@ -58,12 +58,8 @@ class ProviderProfile(models.Model):
     address_city = models.CharField(max_length=200, blank=True)
     address_state = models.CharField(max_length=200, blank=True)
     address_zip = models.CharField(max_length=10, blank=True)
-    address_lat = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
-    address_lng = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True
-    )
+    address_lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
+    address_lng = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
 
     # Configurações de agendamento
     timezone = models.CharField(max_length=50, default="America/Sao_Paulo")
@@ -91,6 +87,31 @@ class ProviderProfile(models.Model):
 
     def __str__(self) -> str:
         return self.business_name or str(self.user)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        slug_changed = False
+        if not self.slug:
+            if self.business_name:
+                self.slug = self.generate_unique_slug(self.business_name)
+            else:
+                # Slug temporário baseado em UUID para perfis sem business_name ainda
+                import uuid as _uuid
+
+                self.slug = f"perfil-{str(_uuid.uuid4())[:8]}"
+            slug_changed = True
+        elif self.business_name and self.slug.startswith("perfil-"):
+            # Slug temporário presente — regera com o business_name atual
+            self.slug = self.generate_unique_slug(self.business_name)
+            slug_changed = True
+
+        # Garante que slug é persistido mesmo quando update_fields está presente
+        if slug_changed and "update_fields" in kwargs:
+            update_fields = list(kwargs["update_fields"])  # type: ignore[arg-type]
+            if "slug" not in update_fields:
+                update_fields.append("slug")
+            kwargs["update_fields"] = update_fields
+
+        super().save(*args, **kwargs)
 
     @classmethod
     def generate_unique_slug(
@@ -126,7 +147,95 @@ class ProviderProfile(models.Model):
 
         return candidate
 
-    def save(self, *args: object, **kwargs: object) -> None:
-        if not self.slug and self.business_name:
-            self.slug = self.generate_unique_slug(self.business_name)
-        super().save(*args, **kwargs)
+
+class WorkingHours(models.Model):
+    """Horário de funcionamento de um prestador ou profissional."""
+
+    WEEKDAY_CHOICES = [
+        (0, "Segunda-feira"),
+        (1, "Terça-feira"),
+        (2, "Quarta-feira"),
+        (3, "Quinta-feira"),
+        (4, "Sexta-feira"),
+        (5, "Sábado"),
+        (6, "Domingo"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        ProviderProfile,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="working_hours",
+    )
+    staff = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="working_hours",
+    )
+    weekday = models.SmallIntegerField(choices=WEEKDAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_working_hours"
+        verbose_name = "Horário de Funcionamento"
+        verbose_name_plural = "Horários de Funcionamento"
+        indexes = [
+            models.Index(fields=["provider", "weekday", "is_active"]),
+            models.Index(fields=["staff", "weekday", "is_active"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(start_time__lt=models.F("end_time")),
+                name="working_hours_start_before_end",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_weekday_display()} {self.start_time}-{self.end_time}"
+
+
+class ScheduleBlock(models.Model):
+    """Bloqueio de agenda — período em que o prestador/profissional não atende."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        ProviderProfile,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="schedule_blocks",
+    )
+    staff = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="schedule_blocks",
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    reason = models.CharField(max_length=500, blank=True)
+    is_recurring = models.BooleanField(default=False)
+    recurrence_rule = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_schedule_block"
+        verbose_name = "Bloqueio de Agenda"
+        verbose_name_plural = "Bloqueios de Agenda"
+        indexes = [
+            models.Index(fields=["provider", "start_datetime", "end_datetime"]),
+            models.Index(fields=["staff", "start_datetime", "end_datetime"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Bloqueio {self.start_datetime} → {self.end_datetime}"

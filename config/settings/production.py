@@ -6,7 +6,7 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.redis import RedisIntegration
 
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 
 DEBUG = False
 
@@ -22,7 +22,7 @@ CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
 
 # ── Storage (AWS S3) ──────────────────────────────────────────────────────────
-from decouple import config  # noqa: F811
+from decouple import config  # noqa: E402, F811
 
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 STATICFILES_STORAGE = "storages.backends.s3boto3.S3StaticStorage"

@@ -99,8 +99,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "config", "core"]
-known-django = ["django", "rest_framework"]
-sections = ["FUTURE", "STDLIB", "DJANGO", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+known-third-party = ["django", "rest_framework"]
 
 [tool.ruff.format]
 quote-style = "double"

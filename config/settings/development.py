@@ -1,6 +1,6 @@
 """Configurações para ambiente de desenvolvimento local."""
 
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 
 DEBUG = True
 
@@ -16,7 +16,18 @@ CORS_ALLOW_ALL_ORIGINS = True
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Exibe queries SQL no console em dev (desativar em produção)
-LOGGING["loggers"]["django.db.backends"]["level"] = "DEBUG"  # type: ignore[index]
+LOGGING["loggers"]["django.db.backends"]["level"] = "DEBUG"  # type: ignore[index]  # noqa: F405
+
+# Rate limits mais altos em dev para não bloquear testes E2E
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,  # type: ignore[name-defined]  # noqa: F405
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "1000/hour",
+        "user": "5000/hour",
+        "otp": "100/hour",
+        "register": "1000/hour",
+    },
+}
 
 # Celery executa tasks de forma síncrona em dev (sem precisar do worker rodando)
 # Comentar para testar com o worker real
