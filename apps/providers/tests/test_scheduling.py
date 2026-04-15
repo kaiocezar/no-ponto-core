@@ -22,7 +22,7 @@ from apps.providers.tests.factories import (
 )
 
 BRT = zoneinfo.ZoneInfo("America/Sao_Paulo")
-UTC = datetime.timezone.utc
+UTC = datetime.UTC
 
 
 @pytest.fixture
@@ -387,9 +387,7 @@ class TestScheduleBlockAPI:
         """
         block = ScheduleBlockFactory.create(provider=provider_profile)
 
-        response = authenticated_provider_api.delete(
-            f"/api/v1/providers/me/blocks/{block.pk}/"
-        )
+        response = authenticated_provider_api.delete(f"/api/v1/providers/me/blocks/{block.pk}/")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not ScheduleBlock.objects.filter(pk=block.pk).exists()
@@ -498,7 +496,7 @@ class TestAvailabilityLogic:
         ScheduleBlockFactory.create(
             provider=profile,
             start_datetime=datetime.datetime(2026, 4, 27, 12, 0, tzinfo=UTC),  # 09:00 BRT
-            end_datetime=datetime.datetime(2026, 4, 27, 14, 0, tzinfo=UTC),    # 11:00 BRT
+            end_datetime=datetime.datetime(2026, 4, 27, 14, 0, tzinfo=UTC),  # 11:00 BRT
             is_recurring=False,
         )
 
@@ -513,10 +511,10 @@ class TestAvailabilityLogic:
             )
 
         slot_hours_brt = [s.astimezone(BRT).hour for s in slots]
-        assert 9 not in slot_hours_brt   # Bloqueado: 09:00 BRT
+        assert 9 not in slot_hours_brt  # Bloqueado: 09:00 BRT
         assert 10 not in slot_hours_brt  # Bloqueado: 10:00 BRT
-        assert 8 in slot_hours_brt       # Disponível: 08:00 BRT
-        assert 11 in slot_hours_brt      # Disponível: 11:00 BRT
+        assert 8 in slot_hours_brt  # Disponível: 08:00 BRT
+        assert 11 in slot_hours_brt  # Disponível: 11:00 BRT
 
     @pytest.mark.django_db
     def test_slots_before_min_notice_removed(self) -> None:

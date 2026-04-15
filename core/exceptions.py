@@ -4,7 +4,6 @@ from typing import Any
 
 from django.http import Http404
 from rest_framework import exceptions, status
-from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -73,6 +72,7 @@ def _get_details(response: Response) -> dict[str, Any] | None:
 
 
 # ── Exceções de negócio customizadas ─────────────────────────────────────────
+
 
 class SlotNotAvailableError(exceptions.APIException):
     status_code = status.HTTP_409_CONFLICT
