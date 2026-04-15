@@ -102,46 +102,29 @@ class ProviderProfileWriteSerializer(serializers.ModelSerializer[ProviderProfile
 
 
 class WorkingHoursSerializer(serializers.ModelSerializer[WorkingHours]):
-    """
-    Serializer de horários de funcionamento.
+    """Serializer de horários de funcionamento."""
 
-    Mapeia os nomes de campo do frontend (day_of_week, open_time, close_time)
-    para os campos do model (weekday, start_time, end_time).
-    """
-
-    # Mapeamento: nome da API → campo do model
-    day_of_week = serializers.IntegerField(source="weekday")
-    open_time = serializers.TimeField(source="start_time", format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
-    close_time = serializers.TimeField(source="end_time", format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
+    start_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
+    end_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
 
     class Meta:
         model = WorkingHours
-        fields = ["id", "day_of_week", "open_time", "close_time", "is_active"]
+        fields = ["id", "weekday", "start_time", "end_time", "is_active"]
         read_only_fields = ["id"]
 
 
 class _WorkingHoursItemSerializer(serializers.Serializer[Any]):
     """Serializer de um item dentro do payload bulk."""
 
-    day_of_week = serializers.IntegerField(min_value=0, max_value=6)
-    open_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
-    close_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
+    weekday = serializers.IntegerField(min_value=0, max_value=6)
+    start_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
+    end_time = serializers.TimeField(format="%H:%M", input_formats=["%H:%M", "%H:%M:%S"])
     is_active = serializers.BooleanField(default=True)
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        if data["open_time"] >= data["close_time"]:
+        if data["start_time"] >= data["end_time"]:
             raise serializers.ValidationError("O horário de abertura deve ser anterior ao de fechamento.")
         return data
-
-    def to_internal_value(self, data: Any) -> dict[str, Any]:
-        validated = super().to_internal_value(data)
-        # Renomeia para os campos do model
-        return {
-            "weekday": validated["day_of_week"],
-            "start_time": validated["open_time"],
-            "end_time": validated["close_time"],
-            "is_active": validated["is_active"],
-        }
 
 
 class WorkingHoursBulkSerializer(serializers.Serializer[Any]):
