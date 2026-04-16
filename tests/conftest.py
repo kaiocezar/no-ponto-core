@@ -10,11 +10,11 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 
-
 # ── Factories (usando factory_boy) ────────────────────────────────────────────
 # Importar apenas quando os modelos estiverem implementados nas tasks
 
 # ── Fixtures de usuário ───────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def api_client() -> APIClient:

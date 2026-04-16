@@ -10,7 +10,6 @@ Feature: Registro de Prestador
 import pytest
 from rest_framework.test import APIClient
 
-from apps.accounts.models import User
 from apps.providers.models import ProviderProfile
 
 REGISTER_URL = "/api/v1/accounts/register/"

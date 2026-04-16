@@ -40,17 +40,46 @@ class ProviderPublishView(APIView):
     POST /api/v1/providers/me/publish/
 
     Publica o perfil do prestador autenticado.
-    Requer que o campo business_name esteja preenchido.
+    Requer:
+    - business_name preenchido
+    - endereço completo (street, city, state, zip)
+    - pelo menos 1 serviço ativo cadastrado
     """
 
     permission_classes = [IsAuthenticated]
 
+    _ADDRESS_FIELDS: tuple[str, ...] = (
+        "address_street",
+        "address_city",
+        "address_state",
+        "address_zip",
+    )
+
     def post(self, request: Request, *args: object, **kwargs: object) -> Response:
         profile, _ = ProviderProfile.objects.get_or_create(user=request.user)
 
+        errors: dict[str, str] = {}
+
         if not profile.business_name:
+            errors["business_name"] = "Preencha o nome do negócio antes de publicar."
+
+        missing_address = [field for field in self._ADDRESS_FIELDS if not getattr(profile, field)]
+        if missing_address:
+            for field in missing_address:
+                errors[field] = "Este campo é obrigatório para publicar o perfil."
+
+        if not profile.services.filter(is_active=True).exists():
+            errors["services"] = "Cadastre pelo menos um serviço ativo antes de publicar."
+
+        if errors:
             return Response(
-                {"error": {"code": "VALIDATION_ERROR", "message": "Preencha o nome do negócio antes de publicar."}},
+                {
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Preencha todos os campos obrigatórios antes de publicar.",
+                        "details": errors,
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -95,9 +124,7 @@ class PublicProviderProfileView(RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = ProviderProfileReadSerializer
     lookup_field = "slug"
-    queryset = ProviderProfile.objects.filter(is_published=True).select_related(
-        "user", "category"
-    )
+    queryset = ProviderProfile.objects.filter(is_published=True).select_related("user", "category")
 
 
 class ServiceCategoryListView(ListAPIView):

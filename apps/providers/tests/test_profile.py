@@ -9,13 +9,16 @@ Feature: Gerenciamento de Perfil de Prestador
 
 import pytest
 from django.core.exceptions import ValidationError
+from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.providers.models import ProviderProfile
 from apps.providers.tests.factories import ProviderProfileFactory
+from apps.services.tests.factories import ServiceFactory
 
 ME_URL = "/api/v1/providers/me/"
+PUBLISH_URL = "/api/v1/providers/me/publish/"
 
 
 @pytest.fixture
@@ -113,9 +116,7 @@ class TestProviderProfile:
 
         assert response.status_code == 401
 
-    def test_published_profile_accessible_publicly(
-        self, api_client: APIClient, db: None
-    ) -> None:
+    def test_published_profile_accessible_publicly(self, api_client: APIClient, db: None) -> None:
         """
         Dado um perfil de prestador com is_published=True
         Quando qualquer usuário acessa GET /providers/<slug>/
@@ -127,9 +128,7 @@ class TestProviderProfile:
 
         assert response.status_code == 200
 
-    def test_unpublished_profile_returns_404(
-        self, api_client: APIClient, db: None
-    ) -> None:
+    def test_unpublished_profile_returns_404(self, api_client: APIClient, db: None) -> None:
         """
         Dado um perfil de prestador com is_published=False
         Quando qualquer usuário acessa GET /providers/<slug>/
@@ -161,3 +160,121 @@ class TestProviderProfile:
         response = api_client.get(f"/api/v1/providers/{profile.slug}/")
 
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestProviderPublishValidation:
+    """
+    BDD Feature: Validação de publicação do perfil
+
+    Cenários cobertos:
+    - Publicar sem endereço retorna 400 com detalhes dos campos
+    - Publicar sem serviço ativo retorna 400
+    - Publicar com endereço e serviço ativo retorna 200
+    """
+
+    def _make_complete_profile(self) -> ProviderProfile:
+        """Cria um perfil com todos os campos de endereço preenchidos."""
+        return ProviderProfileFactory(
+            business_name="Barbearia do João",
+            address_street="Rua das Flores, 100",
+            address_city="São Paulo",
+            address_state="SP",
+            address_zip="01310-100",
+        )
+
+    def test_publish_without_address_returns_400(self, api_client: APIClient, db: None) -> None:
+        """
+        Scenario: Tentativa de publicar sem endereço
+          Given um perfil sem campos de endereço preenchidos
+          When POST /providers/me/publish/
+          Then resposta 400 com code VALIDATION_ERROR
+          And detalhes informando os campos de endereço ausentes
+        """
+        profile = ProviderProfileFactory(
+            business_name="Negócio Sem Endereço",
+            address_street="",
+            address_city="",
+            address_state="",
+            address_zip="",
+        )
+        ServiceFactory(provider=profile, is_active=True)
+        api_client.force_authenticate(user=profile.user)
+
+        response = api_client.post(PUBLISH_URL)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert "address_street" in error["details"]
+        assert "address_city" in error["details"]
+        assert "address_state" in error["details"]
+        assert "address_zip" in error["details"]
+
+    def test_publish_without_active_service_returns_400(
+        self, api_client: APIClient, db: None
+    ) -> None:
+        """
+        Scenario: Tentativa de publicar sem serviço ativo
+          Given um perfil com endereço completo mas sem serviços ativos
+          When POST /providers/me/publish/
+          Then resposta 400 com code VALIDATION_ERROR
+          And detalhe informando que pelo menos um serviço ativo é necessário
+        """
+        profile = self._make_complete_profile()
+        # Cria serviço inativo — não deve contar para a validação
+        ServiceFactory(provider=profile, is_active=False)
+        api_client.force_authenticate(user=profile.user)
+
+        response = api_client.post(PUBLISH_URL)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert "services" in error["details"]
+
+    def test_publish_with_address_and_active_service_returns_200(
+        self, api_client: APIClient, db: None
+    ) -> None:
+        """
+        Scenario: Publicação bem-sucedida
+          Given um perfil com business_name, endereço completo e ao menos um serviço ativo
+          When POST /providers/me/publish/
+          Then resposta 200
+          And is_published do perfil é True
+        """
+        profile = self._make_complete_profile()
+        ServiceFactory(provider=profile, is_active=True)
+        api_client.force_authenticate(user=profile.user)
+
+        response = api_client.post(PUBLISH_URL)
+
+        assert response.status_code == status.HTTP_200_OK
+        profile.refresh_from_db()
+        assert profile.is_published is True
+
+    def test_publish_without_business_name_returns_400(
+        self, api_client: APIClient, db: None
+    ) -> None:
+        """
+        Scenario: Tentativa de publicar sem business_name
+          Given um perfil sem nome do negócio, mas com endereço e serviço
+          When POST /providers/me/publish/
+          Then resposta 400 informando o campo business_name ausente
+        """
+        profile = ProviderProfileFactory(
+            business_name="",
+            slug="slug-temporario",
+            address_street="Rua A, 1",
+            address_city="SP",
+            address_state="SP",
+            address_zip="01000-000",
+        )
+        ServiceFactory(provider=profile, is_active=True)
+        api_client.force_authenticate(user=profile.user)
+
+        response = api_client.post(PUBLISH_URL)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert "business_name" in error["details"]
