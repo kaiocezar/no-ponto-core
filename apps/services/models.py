@@ -28,6 +28,15 @@ class Service(models.Model):
         help_text="Duração em minutos.",
     )
     is_active = models.BooleanField(default=True, db_index=True)
+    is_online = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se falso, o serviço não aparece para agendamento online público.",
+    )
+    buffer_after = models.PositiveIntegerField(
+        default=0,
+        help_text="Minutos de buffer após o término do serviço (afeta disponibilidade).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

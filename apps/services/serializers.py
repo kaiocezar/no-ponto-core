@@ -29,6 +29,8 @@ class ServiceSerializer(serializers.ModelSerializer[Service]):
             "price",
             "duration_minutes",
             "is_active",
+            "is_online",
+            "buffer_after",
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]

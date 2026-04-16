@@ -95,7 +95,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "T20"]
-"**/migrations/**" = ["E501", "RUF012"]
+"**/migrations/**" = ["E501", "RUF012", "I001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "config", "core"]
