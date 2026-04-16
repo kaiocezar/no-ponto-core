@@ -43,6 +43,10 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
 
 
 def _get_error_code(exc: Exception) -> str:
+    if isinstance(exc, SlotNotAvailableError):
+        return "slot_not_available"
+    if isinstance(exc, ServiceUnavailableError):
+        return "service_unavailable"
     if hasattr(exc, "default_code"):
         return str(exc.default_code).upper()  # type: ignore[union-attr]
     if isinstance(exc, exceptions.NotFound):
@@ -76,8 +80,14 @@ def _get_details(response: Response) -> dict[str, Any] | None:
 
 class SlotNotAvailableError(exceptions.APIException):
     status_code = status.HTTP_409_CONFLICT
-    default_code = "SLOT_NOT_AVAILABLE"
+    default_code = "slot_not_available"
     default_detail = "O horário selecionado não está mais disponível."
+
+
+class ServiceUnavailableError(exceptions.APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "service_unavailable"
+    default_detail = "Serviço indisponível para agendamento."
 
 
 class OTPExpiredError(exceptions.APIException):
