@@ -38,6 +38,11 @@ class Appointment(models.Model):
         WALK_IN = "walk_in", "Presencial"
         IMPORTED = "imported", "Importado"
 
+    class CancelledBy(models.TextChoices):
+        CLIENT = "client", "Cliente"
+        PROVIDER = "provider", "Prestador"
+        SYSTEM = "system", "Sistema"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     public_id = models.CharField(max_length=32, unique=True, db_index=True)
     provider = models.ForeignKey(
@@ -77,6 +82,16 @@ class Appointment(models.Model):
     internal_notes = models.TextField(blank=True)
     price_at_booking = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     deposit_paid = models.BooleanField(default=False)
+    confirmation_sent = models.BooleanField(default=False)
+    reminder_24h_sent = models.BooleanField(default=False)
+    reminder_1h_sent = models.BooleanField(default=False)
+    cancelled_by = models.CharField(
+        max_length=16,
+        choices=CancelledBy.choices,
+        null=True,
+        blank=True,
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

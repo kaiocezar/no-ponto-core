@@ -23,7 +23,10 @@ from apps.appointments.serializers import (
     AppointmentLookupSerializer,
     AppointmentPublicSerializer,
 )
-from apps.appointments.tasks import send_whatsapp_confirmation
+from apps.notifications.tasks import (
+    notify_provider_new_appointment,
+    send_whatsapp_confirmation_request,
+)
 from apps.providers.models import ProviderProfile
 from apps.services.models import Service
 from core.exceptions import ServiceUnavailableError, SlotNotAvailableError
@@ -111,9 +114,11 @@ class AppointmentCreateView(APIView):
 
         aid = str(appointment.pk)
         if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
-            send_whatsapp_confirmation.apply(args=[aid], throw=True)
+            send_whatsapp_confirmation_request.apply(args=[aid], throw=True)
+            notify_provider_new_appointment.apply(args=[aid], throw=True)
         else:
-            send_whatsapp_confirmation.delay(aid)
+            send_whatsapp_confirmation_request.delay(aid)
+            notify_provider_new_appointment.delay(aid)
         return Response(
             AppointmentPublicSerializer(appointment).data,
             status=status.HTTP_201_CREATED,

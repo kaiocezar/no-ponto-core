@@ -33,6 +33,7 @@ REST_FRAMEWORK = {
 # Comentar para testar com o worker real
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
+WHATSAPP_BACKEND = "evolution"
 
 # Storage local em dev (em vez de S3)
 DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"

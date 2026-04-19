@@ -21,12 +21,12 @@ app.autodiscover_tasks()
 app.conf.beat_schedule = {
     # Envia lembretes 24h antes — verifica a cada hora
     "send-24h-reminders": {
-        "task": "apps.notifications.tasks.send_24h_reminders",
+        "task": "apps.appointments.tasks.send_24h_reminders",
         "schedule": crontab(minute=0),
     },
     # Envia lembretes 1h antes — verifica a cada 15 minutos
     "send-1h-reminders": {
-        "task": "apps.notifications.tasks.send_1h_reminders",
+        "task": "apps.appointments.tasks.send_1h_reminders",
         "schedule": crontab(minute="*/15"),
     },
     # Auto-confirma agendamentos pendentes há mais de 24h
