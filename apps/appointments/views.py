@@ -43,6 +43,7 @@ from apps.notifications.tasks import (
 from apps.providers.models import ProviderProfile
 from apps.services.models import Service
 from core.exceptions import ServiceUnavailableError, SlotNotAvailableError
+from core.permissions import IsClientUser
 
 
 def _collect_reschedule_slots(
@@ -77,10 +78,10 @@ class AppointmentCreateView(APIView):
     """
     POST /api/v1/appointments/
 
-    Criação pública de agendamento (sem autenticação).
+    Criação de agendamento para cliente autenticado.
     """
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsClientUser]
 
     def post(self, request: Request, *args: object, **kwargs: object) -> Response:
         ser = AppointmentCreateSerializer(data=request.data)
@@ -109,7 +110,8 @@ class AppointmentCreateView(APIView):
             )
 
         end = start + datetime.timedelta(minutes=service.duration)
-        client_phone = normalize_phone_for_match(data["client_phone"])
+        client_phone = normalize_phone_for_match(request.user.phone_number or data["client_phone"])
+        client_name = (request.user.full_name or data["client_name"]).strip()
 
         with transaction.atomic():
             ProviderProfile.objects.select_for_update().filter(pk=provider.pk).first()
@@ -135,7 +137,8 @@ class AppointmentCreateView(APIView):
                 provider=provider,
                 service=service,
                 staff=None,
-                client_name=data["client_name"],
+                client=request.user,
+                client_name=client_name,
                 client_phone=client_phone,
                 client_email=(data.get("client_email") or "").strip(),
                 start_datetime=start,

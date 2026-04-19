@@ -54,6 +54,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone_verified = models.BooleanField(default=False)
     email_verified = models.BooleanField(default=False)
     full_name = models.CharField(max_length=200, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
     avatar_url = models.URLField(max_length=500, null=True, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.CLIENT)
     auth_provider = models.CharField(
