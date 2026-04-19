@@ -20,6 +20,10 @@ class IsProviderOwner(BasePermission):
         return getattr(provider, "user_id", None) == request.user.pk
 
 
+class IsProviderUser(IsProviderOwner):
+    """Alias para endpoints do prestador (mesmas regras que IsProviderOwner)."""
+
+
 class IsProviderOwnerOrReadOnly(BasePermission):
     """
     GET/HEAD/OPTIONS são públicos.

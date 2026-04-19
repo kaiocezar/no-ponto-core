@@ -210,6 +210,7 @@ CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
 
 CELERY_TASK_ROUTES = {
     "apps.notifications.tasks.send_whatsapp_*": {"queue": "high_priority"},
+    "apps.notifications.tasks.notify_provider_new_appointment": {"queue": "high_priority"},
     "apps.accounts.tasks.send_*_otp": {"queue": "high_priority"},
     "apps.notifications.tasks.send_*_reminder*": {"queue": "notifications"},
     "apps.appointments.tasks.*": {"queue": "default"},
