@@ -231,6 +231,9 @@ SESSION_CACHE_ALIAS = "default"
 WHATSAPP_PHONE_NUMBER_ID: str = config("WHATSAPP_PHONE_NUMBER_ID", default="")
 WHATSAPP_ACCESS_TOKEN: str = config("WHATSAPP_ACCESS_TOKEN", default="")
 WHATSAPP_APP_SECRET: str = config("WHATSAPP_APP_SECRET", default="")
+WHATSAPP_VERIFY_TOKEN: str = config("WHATSAPP_VERIFY_TOKEN", default="dev-whatsapp-verify-token")
+WHATSAPP_BACKEND: str = config("WHATSAPP_BACKEND", default="meta")
+EVOLUTION_API_URL: str = config("EVOLUTION_API_URL", default="http://localhost:8080")
 
 # ── URLs externas ─────────────────────────────────────────────────────────────
 FRONTEND_URL: str = config("FRONTEND_URL", default="http://localhost:5173")
