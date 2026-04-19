@@ -18,6 +18,7 @@ class Notification(models.Model):
         NEW_APPOINTMENT_PROVIDER = "new_appointment_provider", "Novo agendamento para prestador"
         CONFIRMED_ACK = "confirmed_ack", "Confirmacao recebida"
         CANCELLED_PROVIDER = "cancelled_provider", "Cancelamento para prestador"
+        CANCELLED_CLIENT_ACK = "cancelled_client_ack", "Cancelamento confirmado ao cliente"
         REMINDER_24H = "reminder_24h", "Lembrete 24h"
         REMINDER_1H = "reminder_1h", "Lembrete 1h"
         RESCHEDULE_LINK = "reschedule_link", "Link de reagendamento"

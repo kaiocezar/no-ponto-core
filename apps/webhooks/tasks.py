@@ -7,11 +7,14 @@ from uuid import UUID
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.appointments.models import Appointment, AppointmentStatusHistory
+from apps.appointments.rescheduling import reschedule_appointment_atomically
 from apps.notifications.tasks import (
     notify_provider_cancellation,
     send_reschedule_link,
+    send_whatsapp_confirmation_request,
     send_whatsapp_confirmed_ack,
 )
 from apps.webhooks.models import WhatsAppInboundMessage
@@ -40,13 +43,39 @@ def process_whatsapp_response(wamid: str) -> None:
         return
 
     action, raw_appointment_id = payload.split("_", 1)
-    try:
-        appointment_uuid = UUID(raw_appointment_id)
-    except ValueError:
-        inbound.processed = True
-        inbound.action_taken = "invalid_payload"
-        inbound.save(update_fields=["processed", "action_taken"])
-        return
+    if action == "RESCHEDULED":
+        raw_parts = raw_appointment_id.split("_", 1)
+        if len(raw_parts) != 2:
+            inbound.processed = True
+            inbound.action_taken = "ignored"
+            inbound.save(update_fields=["processed", "action_taken"])
+            return
+
+        old_appointment_id, raw_new_datetime = raw_parts
+        try:
+            appointment_uuid = UUID(old_appointment_id)
+        except ValueError:
+            inbound.processed = True
+            inbound.action_taken = "ignored"
+            inbound.save(update_fields=["processed", "action_taken"])
+            return
+
+        new_start = parse_datetime(raw_new_datetime)
+        if new_start is None:
+            inbound.processed = True
+            inbound.action_taken = "ignored"
+            inbound.save(update_fields=["processed", "action_taken"])
+            return
+        if timezone.is_naive(new_start):
+            new_start = timezone.make_aware(new_start, timezone.get_current_timezone())
+    else:
+        try:
+            appointment_uuid = UUID(raw_appointment_id)
+        except ValueError:
+            inbound.processed = True
+            inbound.action_taken = "invalid_payload"
+            inbound.save(update_fields=["processed", "action_taken"])
+            return
 
     try:
         appointment = Appointment.objects.get(pk=appointment_uuid)
@@ -87,6 +116,18 @@ def process_whatsapp_response(wamid: str) -> None:
         elif action == "RESCHEDULE":
             send_reschedule_link.delay(str(appointment.pk))
             action_taken = "reschedule_link_sent"
+        elif action == "RESCHEDULED":
+            result = reschedule_appointment_atomically(
+                appointment_id=appointment.pk,
+                new_start=new_start,
+            )
+            if result.code == "ok" and result.new_appointment is not None:
+                send_whatsapp_confirmation_request.delay(str(result.new_appointment.pk))
+                action_taken = "rescheduled"
+            elif result.code == "slot_taken":
+                action_taken = "slot_taken"
+            else:
+                action_taken = "ignored"
         else:
             action_taken = "ignored"
 

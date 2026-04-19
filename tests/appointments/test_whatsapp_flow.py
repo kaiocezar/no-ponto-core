@@ -278,6 +278,54 @@ def test_process_whatsapp_response_reschedule_sends_link(monkeypatch: pytest.Mon
 
 
 @pytest.mark.django_db
+def test_process_whatsapp_response_rescheduled_creates_new_appointment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    appointment = _create_appointment()
+    inbound = WhatsAppInboundMessage.objects.create(
+        wamid="wamid.rescheduled.ok",
+        from_phone=appointment.client_phone,
+        button_payload=(
+            f"RESCHEDULED_{appointment.pk}_"
+            f"{(appointment.start_datetime + timedelta(days=2)).isoformat()}"
+        ),
+    )
+    sent_confirmations: list[str] = []
+    monkeypatch.setattr(
+        "apps.webhooks.tasks.send_whatsapp_confirmation_request.delay",
+        lambda appointment_id: sent_confirmations.append(appointment_id),
+    )
+
+    process_whatsapp_response("wamid.rescheduled.ok")
+    inbound.refresh_from_db()
+    appointment.refresh_from_db()
+    new_appointment = Appointment.objects.exclude(pk=appointment.pk).latest("created_at")
+
+    assert inbound.action_taken == "rescheduled"
+    assert appointment.status == Appointment.Status.CANCELLED
+    assert new_appointment.status == Appointment.Status.PENDING_CONFIRMATION
+    assert sent_confirmations == [str(new_appointment.pk)]
+
+
+@pytest.mark.django_db
+def test_process_whatsapp_response_rescheduled_invalid_format_is_ignored() -> None:
+    appointment = _create_appointment()
+    inbound = WhatsAppInboundMessage.objects.create(
+        wamid="wamid.rescheduled.invalid",
+        from_phone=appointment.client_phone,
+        button_payload=f"RESCHEDULED_{appointment.pk}",
+    )
+
+    process_whatsapp_response("wamid.rescheduled.invalid")
+    inbound.refresh_from_db()
+    appointment.refresh_from_db()
+
+    assert inbound.processed is True
+    assert inbound.action_taken == "ignored"
+    assert appointment.status == Appointment.Status.PENDING_CONFIRMATION
+
+
+@pytest.mark.django_db
 def test_process_whatsapp_response_nonexistent_uuid_no_exception() -> None:
     WhatsAppInboundMessage.objects.create(
         wamid="wamid.invalid",
