@@ -12,6 +12,7 @@ class Notification(models.Model):
 
     class Channel(models.TextChoices):
         WHATSAPP = "whatsapp", "WhatsApp"
+        EMAIL = "email", "Email"
 
     class Type(models.TextChoices):
         CONFIRMATION_REQUEST = "confirmation_request", "Confirmacao de agendamento"
@@ -60,6 +61,13 @@ class Notification(models.Model):
         indexes = [
             models.Index(fields=["appointment", "type"]),
             models.Index(fields=["status", "created_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment"],
+                condition=models.Q(type="new_appointment_provider"),
+                name="notifications_new_provider_one_per_appt",
+            ),
         ]
 
     def __str__(self) -> str:

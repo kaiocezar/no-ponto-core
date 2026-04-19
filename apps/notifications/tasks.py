@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.appointments.models import Appointment
@@ -23,15 +24,38 @@ def _send_template_and_track(
     notification_type: str,
     variables: dict[str, str],
     buttons: list[str] | None = None,
+    notification: Notification | None = None,
 ) -> None:
-    notification = Notification.objects.create(
-        appointment=appointment,
-        channel=Notification.Channel.WHATSAPP,
-        type=notification_type,
-        status=Notification.Status.PENDING,
-        template_name=template_name,
-        payload={"to": to, "variables": variables, "buttons": buttons or []},
-    )
+    if notification is None:
+        notification = Notification.objects.create(
+            appointment=appointment,
+            channel=Notification.Channel.WHATSAPP,
+            type=notification_type,
+            status=Notification.Status.PENDING,
+            template_name=template_name,
+            payload={"to": to, "variables": variables, "buttons": buttons or []},
+        )
+    else:
+        notification.channel = Notification.Channel.WHATSAPP
+        notification.type = notification_type
+        notification.status = Notification.Status.PENDING
+        notification.template_name = template_name
+        notification.payload = {"to": to, "variables": variables, "buttons": buttons or []}
+        notification.error_message = ""
+        notification.external_id = ""
+        notification.sent_at = None
+        notification.save(
+            update_fields=[
+                "channel",
+                "type",
+                "status",
+                "template_name",
+                "payload",
+                "error_message",
+                "external_id",
+                "sent_at",
+            ],
+        )
     payload = get_whatsapp_client().send_template(
         to=to,
         template_name=template_name,
@@ -44,7 +68,16 @@ def _send_template_and_track(
     notification.save(update_fields=["external_id", "status", "sent_at"])
 
 
-@shared_task(bind=True, ignore_result=True, max_retries=3)
+def _resolve_client_display_name(appointment: Appointment) -> str:
+    client = appointment.client
+    if client is not None:
+        full = (client.full_name or "").strip()
+        if full:
+            return full
+    return appointment.client_name
+
+
+@shared_task(bind=True, ignore_result=True, max_retries=3, queue="high_priority")
 def send_whatsapp_confirmation_request(self, appointment_id: str) -> None:  # type: ignore[override]
     try:
         appointment = Appointment.objects.select_related("provider", "service").get(
@@ -76,23 +109,69 @@ def send_whatsapp_confirmation_request(self, appointment_id: str) -> None:  # ty
         raise self.retry(exc=exc, countdown=countdown) from exc
 
 
-@shared_task(ignore_result=True)
-def notify_provider_new_appointment(appointment_id: str) -> None:
-    appointment = Appointment.objects.select_related("provider", "service").get(pk=appointment_id)
-    whatsapp_number = appointment.provider.whatsapp_number
-    if not whatsapp_number:
-        return
-    _send_template_and_track(
-        appointment=appointment,
-        to=whatsapp_number,
-        template_name="new_appointment_provider",
-        notification_type=Notification.Type.NEW_APPOINTMENT_PROVIDER,
-        variables={
-            "cliente": appointment.client_name,
-            "servico": appointment.service.name,
-            "data_hora": timezone.localtime(appointment.start_datetime).strftime("%d/%m %H:%M"),
-        },
-    )
+@shared_task(bind=True, ignore_result=True, max_retries=3, queue="high_priority")
+def notify_provider_new_appointment(self, appointment_id: str) -> None:  # type: ignore[override]
+    try:
+        appointment = Appointment.objects.select_related("provider", "service", "client").get(
+            pk=appointment_id
+        )
+        client_label = _resolve_client_display_name(appointment)
+
+        try:
+            with transaction.atomic():
+                notification, created = Notification.objects.get_or_create(
+                    appointment=appointment,
+                    type=Notification.Type.NEW_APPOINTMENT_PROVIDER,
+                    defaults={
+                        "channel": Notification.Channel.WHATSAPP,
+                        "status": Notification.Status.PENDING,
+                        "template_name": "",
+                        "payload": {},
+                    },
+                )
+        except IntegrityError:
+            notification = Notification.objects.get(
+                appointment=appointment,
+                type=Notification.Type.NEW_APPOINTMENT_PROVIDER,
+            )
+            created = False
+
+        if not created and notification.status == Notification.Status.SENT:
+            return
+
+        whatsapp_number = (appointment.provider.whatsapp_number or "").strip()
+        if not whatsapp_number:
+            notification.channel = Notification.Channel.EMAIL
+            notification.status = Notification.Status.FAILED
+            notification.error_message = "Email não configurado no MVP"
+            notification.save(
+                update_fields=["channel", "status", "error_message"],
+            )
+            logger.warning(
+                "Prestador %s sem WhatsApp: stub de email para novo agendamento %s",
+                appointment.provider_id,
+                appointment_id,
+            )
+            return
+
+        _send_template_and_track(
+            appointment=appointment,
+            to=whatsapp_number,
+            template_name="new_appointment_provider",
+            notification_type=Notification.Type.NEW_APPOINTMENT_PROVIDER,
+            variables={
+                "cliente": client_label,
+                "servico": appointment.service.name,
+                "data_hora": timezone.localtime(appointment.start_datetime).strftime("%d/%m %H:%M"),
+            },
+            notification=notification,
+        )
+    except Exception as exc:
+        logger.exception("Falha ao notificar prestador sobre agendamento %s", appointment_id)
+        if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+            return
+        countdown = 2**self.request.retries
+        raise self.retry(exc=exc, countdown=countdown) from exc
 
 
 @shared_task(ignore_result=True)
@@ -133,6 +212,12 @@ def send_cancellation_ack_client(appointment_id: str) -> None:
         variables={"servico": appointment.service.name},
         buttons=[f"RESCHEDULE_{appointment.pk}"],
     )
+
+
+@shared_task(ignore_result=True)
+def notify_client_provider_cancellation(appointment_id: str) -> None:
+    """Fila aviso ao cliente quando o prestador cancela (delega ao template existente)."""
+    send_cancellation_ack_client.delay(appointment_id)
 
 
 @shared_task(ignore_result=True)
