@@ -62,6 +62,13 @@ class Appointment(models.Model):
         blank=True,
         related_name="staff_appointments",
     )
+    client = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments",
+    )
     client_name = models.CharField(max_length=200)
     client_phone = models.CharField(max_length=32)
     client_email = models.EmailField(blank=True)

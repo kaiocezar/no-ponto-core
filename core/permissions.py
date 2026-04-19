@@ -45,3 +45,15 @@ class IsOwnerOrReadOnly(BasePermission):
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return True
         return getattr(obj, "user_id", getattr(obj, "client_id", None)) == request.user.pk
+
+
+class IsClientUser(BasePermission):
+    """Permite acesso apenas para usuários autenticados com role de cliente."""
+
+    message = "Apenas clientes podem acessar este recurso."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        return getattr(user, "role", None) == "client"

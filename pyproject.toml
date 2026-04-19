@@ -37,6 +37,7 @@ dependencies = [
     # ── Segurança ─────────────────────────────────────────────────────────────
     "argon2-cffi>=23.1",              # Hash de senhas (mais seguro que bcrypt)
     "cryptography>=44.0",             # Criptografia de tokens OAuth/dados sensíveis
+    "phonenumbers>=8.13",
 ]
 
 [dependency-groups]

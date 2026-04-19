@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.accounts.models import User
 from apps.appointments.cancellation import validate_cancellation
 from apps.appointments.models import Appointment, AppointmentStatusHistory
 from apps.appointments.tests.factories import AppointmentFactory
@@ -46,7 +47,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         provider = published_booking_context["provider"]
         service = published_booking_context["service"]
         start = _future_slot()
@@ -70,7 +73,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         service = published_booking_context["service"]
         start = _future_slot()
         resp = api.post(
@@ -90,7 +95,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         provider = published_booking_context["provider"]
         service = published_booking_context["service"]
         service.is_active = False
@@ -114,7 +121,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         provider = published_booking_context["provider"]
         service = published_booking_context["service"]
         service.is_online = False
@@ -138,7 +147,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         provider = published_booking_context["provider"]
         service = published_booking_context["service"]
         start = _future_slot()
@@ -163,7 +174,9 @@ class TestAppointmentCreate:
         self,
         api: APIClient,
         published_booking_context: dict[str, object],
+        client_user: User,
     ) -> None:
+        api.force_authenticate(user=client_user)
         provider = published_booking_context["provider"]
         service = published_booking_context["service"]
         start = _future_slot() + datetime.timedelta(hours=2)
@@ -186,6 +199,50 @@ class TestAppointmentCreate:
         assert h is not None
         assert h.from_status is None
         assert h.to_status == Appointment.Status.PENDING_CONFIRMATION
+
+    def test_create_without_auth_returns_401(
+        self,
+        api: APIClient,
+        published_booking_context: dict[str, object],
+    ) -> None:
+        provider = published_booking_context["provider"]
+        service = published_booking_context["service"]
+        start = _future_slot()
+        resp = api.post(
+            "/api/v1/appointments/",
+            {
+                "provider_slug": provider.slug,
+                "service_id": str(service.id),
+                "start_datetime": start.isoformat(),
+                "client_name": "Cliente Novo",
+                "client_phone": "+5511988877766",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_create_with_provider_role_returns_403(
+        self,
+        api: APIClient,
+        published_booking_context: dict[str, object],
+        provider_user: User,
+    ) -> None:
+        api.force_authenticate(user=provider_user)
+        provider = published_booking_context["provider"]
+        service = published_booking_context["service"]
+        start = _future_slot()
+        resp = api.post(
+            "/api/v1/appointments/",
+            {
+                "provider_slug": provider.slug,
+                "service_id": str(service.id),
+                "start_datetime": start.isoformat(),
+                "client_name": "Cliente Novo",
+                "client_phone": "+5511988877766",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db

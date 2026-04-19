@@ -155,7 +155,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/hour",
         "user": "1000/hour",
-        "otp": "5/10min",
+        "otp_request": "5/10min",
         "register": "10/hour",
     },
 }

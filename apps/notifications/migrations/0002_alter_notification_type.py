@@ -4,15 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('notifications', '0001_initial'),
+        ("notifications", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='notification',
-            name='type',
-            field=models.CharField(choices=[('confirmation_request', 'Confirmacao de agendamento'), ('new_appointment_provider', 'Novo agendamento para prestador'), ('confirmed_ack', 'Confirmacao recebida'), ('cancelled_provider', 'Cancelamento para prestador'), ('cancelled_client_ack', 'Cancelamento confirmado ao cliente'), ('reminder_24h', 'Lembrete 24h'), ('reminder_1h', 'Lembrete 1h'), ('reschedule_link', 'Link de reagendamento')], max_length=64),
+            model_name="notification",
+            name="type",
+            field=models.CharField(
+                choices=[
+                    ("confirmation_request", "Confirmacao de agendamento"),
+                    ("new_appointment_provider", "Novo agendamento para prestador"),
+                    ("confirmed_ack", "Confirmacao recebida"),
+                    ("cancelled_provider", "Cancelamento para prestador"),
+                    ("cancelled_client_ack", "Cancelamento confirmado ao cliente"),
+                    ("reminder_24h", "Lembrete 24h"),
+                    ("reminder_1h", "Lembrete 1h"),
+                    ("reschedule_link", "Link de reagendamento"),
+                ],
+                max_length=64,
+            ),
         ),
     ]
