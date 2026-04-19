@@ -44,6 +44,9 @@ def _extract_message_payload(raw_data: bytes) -> tuple[str, str, str, str, str]:
     button_payload = str(message.get("button", {}).get("payload", ""))
     if not button_payload:
         button_payload = str(message.get("interactive", {}).get("button_reply", {}).get("id", ""))
+    if not button_payload:
+        list_reply = message.get("interactive", {}).get("list_reply", {})
+        button_payload = str(list_reply.get("id") or list_reply.get("row_id") or "")
     return wamid, from_phone, message_type, body, button_payload
 
 

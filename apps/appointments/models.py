@@ -91,6 +91,7 @@ class Appointment(models.Model):
         null=True,
         blank=True,
     )
+    cancellation_reason = models.TextField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

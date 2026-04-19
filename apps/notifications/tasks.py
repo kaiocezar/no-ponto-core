@@ -123,6 +123,19 @@ def notify_provider_cancellation(appointment_id: str) -> None:
 
 
 @shared_task(ignore_result=True)
+def send_cancellation_ack_client(appointment_id: str) -> None:
+    appointment = Appointment.objects.select_related("service").get(pk=appointment_id)
+    _send_template_and_track(
+        appointment=appointment,
+        to=appointment.client_phone,
+        template_name="appointment_cancelled_by_client",
+        notification_type=Notification.Type.CANCELLED_CLIENT_ACK,
+        variables={"servico": appointment.service.name},
+        buttons=[f"RESCHEDULE_{appointment.pk}"],
+    )
+
+
+@shared_task(ignore_result=True)
 def send_whatsapp_reminder_24h(appointment_id: str) -> None:
     appointment = Appointment.objects.select_related("service").get(pk=appointment_id)
     _send_template_and_track(
