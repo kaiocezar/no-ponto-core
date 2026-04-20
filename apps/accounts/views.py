@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.generics import CreateAPIView, GenericAPIView, UpdateAPIView
+from rest_framework.generics import CreateAPIView, GenericAPIView, ListAPIView, UpdateAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -15,10 +15,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.serializers import (
     ClientMeSerializer,
     CompleteProfileSerializer,
+    MyAppointmentSerializer,
     ProviderRegisterSerializer,
     RequestOTPSerializer,
     VerifyOTPSerializer,
 )
+from apps.appointments.models import Appointment
 from apps.accounts.services import generate_otp, verify_otp
 from core.permissions import IsClientUser
 
@@ -256,4 +258,32 @@ class AcceptInviteView(GenericAPIView):
                 "provider_name": staff.provider.business_name or str(staff.provider),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class MyAppointmentsView(ListAPIView):
+    permission_classes = [IsClientUser]
+    serializer_class = MyAppointmentSerializer
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        status_filter = self.request.query_params.get("status", "upcoming")
+        now = timezone.now()
+        qs = (
+            Appointment.objects.filter(client=self.request.user)
+            .select_related("service", "provider", "review")
+            .order_by("start_datetime")
+        )
+        if status_filter == "past":
+            return qs.filter(
+                models.Q(start_datetime__lt=now)
+                | models.Q(
+                    status__in=[
+                        Appointment.Status.COMPLETED,
+                        Appointment.Status.CANCELLED,
+                        Appointment.Status.NO_SHOW,
+                    ]
+                )
+            ).order_by("-start_datetime")
+        return qs.filter(start_datetime__gte=now).exclude(
+            status__in=[Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW]
         )

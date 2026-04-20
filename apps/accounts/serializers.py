@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 import phonenumbers
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import User
+from apps.appointments.models import Appointment
 from apps.providers.models import ProviderProfile
 
 
@@ -99,3 +101,48 @@ class ClientMeSerializer(serializers.ModelSerializer[User]):
         if User.objects.filter(email=normalized).exclude(pk=getattr(user, "pk", None)).exists():
             raise serializers.ValidationError("Este e-mail já está em uso.")
         return normalized
+
+
+class MyAppointmentSerializer(serializers.ModelSerializer[Appointment]):
+    service_name = serializers.CharField(source="service.name", read_only=True)
+    provider_name = serializers.CharField(source="provider.business_name", read_only=True)
+    review_status = serializers.SerializerMethodField()
+    review_token = serializers.SerializerMethodField()
+    review_rating = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = [
+            "id",
+            "public_id",
+            "status",
+            "start_datetime",
+            "end_datetime",
+            "service_name",
+            "provider_name",
+            "review_status",
+            "review_token",
+            "review_rating",
+        ]
+
+    def get_review_status(self, obj: Appointment) -> str | None:
+        review = getattr(obj, "review", None)
+        if review is None:
+            return None
+        if review.rating is not None:
+            return "completed"
+        if review.token_expires_at >= timezone.now():
+            return "pending"
+        return None
+
+    def get_review_token(self, obj: Appointment) -> str | None:
+        review = getattr(obj, "review", None)
+        if review is None:
+            return None
+        if review.rating is None and review.token_expires_at >= timezone.now():
+            return review.review_token
+        return None
+
+    def get_review_rating(self, obj: Appointment) -> int | None:
+        review = getattr(obj, "review", None)
+        return review.rating if review is not None else None

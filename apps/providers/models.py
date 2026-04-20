@@ -127,6 +127,8 @@ class ProviderProfile(models.Model):
     website_url = models.URLField(max_length=500, null=True, blank=True)
 
     is_published = models.BooleanField(default=False, db_index=True)
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    total_reviews = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -316,3 +318,40 @@ class ServiceStaff(models.Model):
 
     def __str__(self) -> str:
         return f"{self.staff} → {self.service}"
+
+
+class ClientNote(models.Model):
+    """Nota interna sobre cliente, visivel apenas ao prestador dono."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        ProviderProfile,
+        on_delete=models.CASCADE,
+        related_name="client_notes",
+    )
+    client_phone = models.CharField(max_length=32, db_index=True)
+    client_user = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="provider_client_notes",
+    )
+    note = models.TextField()
+    created_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="created_client_notes",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_client_note"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["provider", "client_phone", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Nota {self.client_phone} ({self.provider_id})"

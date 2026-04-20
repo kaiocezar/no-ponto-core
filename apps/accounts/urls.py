@@ -9,6 +9,7 @@ from apps.accounts.views import (
     CompleteProfileView,
     RegisterProviderView,
     RequestOTPView,
+    MyAppointmentsView,
     ValidateInviteView,
     VerifyOTPView,
 )
@@ -21,6 +22,7 @@ urlpatterns = [
     path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
     path("complete-profile/", CompleteProfileView.as_view(), name="complete-profile"),
     path("me/", ClientMeView.as_view(), name="accounts-me"),
+    path("me/appointments/", MyAppointmentsView.as_view(), name="accounts-my-appointments"),
     path("accept-invite/", ValidateInviteView.as_view(), name="validate-invite"),
     path("accept-invite/accept/", AcceptInviteView.as_view(), name="accept-invite"),
 ]

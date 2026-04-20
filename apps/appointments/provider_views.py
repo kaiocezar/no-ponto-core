@@ -34,8 +34,8 @@ from apps.appointments.provider_serializers import (
 )
 from apps.notifications.tasks import (
     notify_client_provider_cancellation,
-    send_pending_review_requests,
 )
+from apps.reviews.tasks import send_review_request
 from apps.providers.models import ProviderProfile
 from apps.services.models import Service
 from core.exceptions import SlotNotAvailableError
@@ -207,9 +207,12 @@ class ProviderAppointmentConfirmView(_ProviderAppointmentActionView):
 class ProviderAppointmentCompleteView(_ProviderAppointmentActionView):
     def post(self, request: Request, pk: str, *args: object, **kwargs: object) -> Response:
         appointment = self.get_appointment(request, pk)
-        if appointment.status != Appointment.Status.CONFIRMED:
+        if appointment.status not in (Appointment.Status.CONFIRMED, Appointment.Status.NO_SHOW):
             return Response(
-                {"code": "invalid_status", "detail": "Apenas agendamentos confirmados."},
+                {
+                    "code": "invalid_status",
+                    "detail": "Apenas agendamentos confirmados ou no-show.",
+                },
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         prev = appointment.status
@@ -220,7 +223,7 @@ class ProviderAppointmentCompleteView(_ProviderAppointmentActionView):
             from_status=prev,
             to_status=Appointment.Status.COMPLETED,
         )
-        send_pending_review_requests.delay()
+        send_review_request.apply_async(args=[str(appointment.pk)], countdown=7200)
         return Response(ProviderAppointmentDetailSerializer(appointment).data)
 
 

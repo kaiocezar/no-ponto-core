@@ -4,7 +4,14 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.providers.models import ProviderProfile, ScheduleBlock, ServiceCategory, WorkingHours
+from apps.providers.models import (
+    ClientNote,
+    ProviderProfile,
+    ScheduleBlock,
+    ServiceCategory,
+    WorkingHours,
+)
+from apps.appointments.models import Appointment
 from apps.services.serializers import ServiceSerializer
 
 
@@ -20,7 +27,14 @@ class ProviderProfileReadSerializer(serializers.ModelSerializer[ProviderProfile]
     """Serializer read-only de perfil de prestador com categoria e serviços aninhados."""
 
     category = ServiceCategorySerializer(read_only=True)
-    rating_average = serializers.SerializerMethodField()
+    rating_average = serializers.DecimalField(
+        source="average_rating",
+        read_only=True,
+        max_digits=3,
+        decimal_places=2,
+        allow_null=True,
+    )
+    total_reviews = serializers.IntegerField(read_only=True)
     services = serializers.SerializerMethodField()
 
     class Meta:
@@ -53,17 +67,13 @@ class ProviderProfileReadSerializer(serializers.ModelSerializer[ProviderProfile]
             "created_at",
             "updated_at",
             "rating_average",
+            "total_reviews",
             "services",
         ]
 
     def get_services(self, obj: ProviderProfile) -> list[dict[str, Any]]:
         qs = obj.services.filter(is_active=True).order_by("name")  # type: ignore[attr-defined]
         return ServiceSerializer(qs, many=True).data  # type: ignore[return-value]
-
-    def get_rating_average(self, obj: ProviderProfile) -> None:
-        # Implementar na task de reviews
-        return None
-
 
 class ProviderProfileWriteSerializer(serializers.ModelSerializer[ProviderProfile]):
     """Serializer de escrita para atualização de perfil de prestador."""
@@ -185,3 +195,50 @@ class ScheduleBlockSerializer(serializers.ModelSerializer[ScheduleBlock]):
                 "Bloqueios recorrentes exigem uma regra de recorrência (recurrence_rule)."
             )
         return data
+
+
+class ProviderDashboardNextAppointmentSerializer(serializers.Serializer[Any]):
+    id = serializers.UUIDField()
+    public_id = serializers.CharField()
+    client_name = serializers.CharField()
+    service_name = serializers.CharField()
+    start_datetime = serializers.DateTimeField()
+    status = serializers.CharField()
+
+
+class ClientListSerializer(serializers.Serializer[Any]):
+    client_phone = serializers.CharField()
+    client_name = serializers.CharField(allow_blank=True)
+    total_appointments = serializers.IntegerField()
+    last_appointment_date = serializers.DateTimeField()
+
+
+class ClientAppointmentHistorySerializer(serializers.ModelSerializer[Appointment]):
+    service_name = serializers.CharField(source="service.name", read_only=True)
+    staff_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = [
+            "id",
+            "public_id",
+            "service_name",
+            "staff_name",
+            "status",
+            "price_at_booking",
+            "start_datetime",
+        ]
+
+    def get_staff_name(self, obj: Appointment) -> str | None:
+        return obj.staff.name if obj.staff else None
+
+
+class ClientNoteSerializer(serializers.ModelSerializer[ClientNote]):
+    class Meta:
+        model = ClientNote
+        fields = ["id", "client_phone", "note", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "client_phone", "created_by", "created_at", "updated_at"]
+
+
+class ClientNoteCreateSerializer(serializers.Serializer[Any]):
+    note = serializers.CharField(max_length=5000)

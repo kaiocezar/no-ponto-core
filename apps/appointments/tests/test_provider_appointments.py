@@ -194,12 +194,12 @@ def test_confirm_complete_no_show_cancel_flow(provider_a: object, service_a: obj
     assert r.json()["status"] == "confirmed"
 
     with patch(
-        "apps.appointments.provider_views.send_pending_review_requests.delay",
+        "apps.appointments.provider_views.send_review_request.apply_async",
         MagicMock(),
-    ) as m_delay:
+    ) as m_apply_async:
         r2 = client.post(reverse("provider-appointment-complete", kwargs={"pk": ap.pk}))
     assert r2.status_code == status.HTTP_200_OK
-    m_delay.assert_called_once()
+    m_apply_async.assert_called_once_with(args=[str(ap.pk)], countdown=7200)
 
     ap2 = Appointment.objects.create(
         public_id="AGD-FFFF",

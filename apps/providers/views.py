@@ -1,5 +1,13 @@
 """Views de perfis de prestadores de serviço."""
 
+from __future__ import annotations
+
+import datetime
+from zoneinfo import ZoneInfo
+
+from django.core.cache import cache
+from django.db.models import Count, Max, OuterRef, Q, Subquery
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import ListAPIView, RetrieveAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -8,12 +16,19 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+from apps.appointments.models import Appointment
 from apps.providers.models import ProviderProfile, ServiceCategory
 from apps.providers.serializers import (
+    ClientAppointmentHistorySerializer,
+    ClientListSerializer,
+    ClientNoteCreateSerializer,
+    ClientNoteSerializer,
     ProviderProfileReadSerializer,
     ProviderProfileWriteSerializer,
+    ProviderDashboardNextAppointmentSerializer,
     ServiceCategorySerializer,
 )
+from core.pagination import CursorPagination
 
 
 class ProviderMeView(RetrieveUpdateAPIView):
@@ -138,3 +153,148 @@ class ServiceCategoryListView(ListAPIView):
     serializer_class = ServiceCategorySerializer
     queryset = ServiceCategory.objects.all()
     pagination_class = None
+
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, *args: object, **kwargs: object) -> Response:
+        provider = request.user.provider_profile
+        provider_tz = ZoneInfo(provider.timezone or "America/Sao_Paulo")
+        now_provider = timezone.now().astimezone(provider_tz)
+        today_start = datetime.datetime.combine(
+            now_provider.date(), datetime.time.min, tzinfo=provider_tz
+        )
+        tomorrow_start = today_start + datetime.timedelta(days=1)
+        week_start = today_start - datetime.timedelta(days=now_provider.weekday())
+        month_start = today_start.replace(day=1)
+        cache_key = f"dashboard:{provider.id}:{now_provider.date().isoformat()}"
+
+        if cached := cache.get(cache_key):
+            return Response(cached)
+
+        provider_qs = Appointment.objects.filter(provider=provider)
+        today_qs = provider_qs.filter(start_datetime__gte=today_start, start_datetime__lt=tomorrow_start)
+        week_qs = provider_qs.filter(start_datetime__gte=week_start, start_datetime__lt=tomorrow_start)
+        month_qs = provider_qs.filter(start_datetime__gte=month_start, start_datetime__lt=tomorrow_start)
+
+        week_total = week_qs.count()
+        week_cancelled = week_qs.filter(status=Appointment.Status.CANCELLED).count()
+        cancellation_rate = round((week_cancelled / week_total) * 100, 1) if week_total else 0.0
+
+        next_appointments = (
+            provider_qs.select_related("service")
+            .filter(
+                start_datetime__gte=timezone.now(),
+                status__in=[Appointment.Status.CONFIRMED, Appointment.Status.PENDING_CONFIRMATION],
+            )
+            .order_by("start_datetime")[:5]
+        )
+        next_payload = [
+            {
+                "id": ap.id,
+                "public_id": ap.public_id,
+                "client_name": ap.client_name,
+                "service_name": ap.service.name,
+                "start_datetime": ap.start_datetime,
+                "status": ap.status,
+            }
+            for ap in next_appointments
+        ]
+        payload = {
+            "today": {
+                "total": today_qs.count(),
+                "confirmed": today_qs.filter(status=Appointment.Status.CONFIRMED).count(),
+                "pending_confirmation": today_qs.filter(
+                    status=Appointment.Status.PENDING_CONFIRMATION
+                ).count(),
+                "cancelled": today_qs.filter(status=Appointment.Status.CANCELLED).count(),
+                "completed": today_qs.filter(status=Appointment.Status.COMPLETED).count(),
+                "no_show": today_qs.filter(status=Appointment.Status.NO_SHOW).count(),
+            },
+            "week": {
+                "total": week_total,
+                "confirmed": week_qs.filter(status=Appointment.Status.CONFIRMED).count(),
+                "cancelled": week_cancelled,
+                "cancellation_rate": cancellation_rate,
+            },
+            "month": {"total": month_qs.count()},
+            "next_appointments": ProviderDashboardNextAppointmentSerializer(next_payload, many=True).data,
+        }
+        cache.set(cache_key, payload, timeout=120)
+        return Response(payload)
+
+
+class ClientListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, *args: object, **kwargs: object) -> Response:
+        provider = request.user.provider_profile
+        search = (request.query_params.get("search") or "").strip()
+        base_qs = Appointment.objects.filter(provider=provider)
+        if search:
+            base_qs = base_qs.filter(
+                Q(client_name__icontains=search) | Q(client_phone__icontains=search)
+            )
+
+        latest_name_subquery = (
+            Appointment.objects.filter(provider=provider, client_phone=OuterRef("client_phone"))
+            .order_by("-start_datetime")
+            .values("client_name")[:1]
+        )
+        rows = (
+            base_qs.values("client_phone")
+            .annotate(
+                total_appointments=Count("id"),
+                last_appointment_date=Max("start_datetime"),
+                client_name=Subquery(latest_name_subquery),
+            )
+            .order_by("-last_appointment_date")
+        )
+        return Response(ClientListSerializer(rows, many=True).data)
+
+
+class ClientAppointmentHistoryView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ClientAppointmentHistorySerializer
+    pagination_class = CursorPagination
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        provider = self.request.user.provider_profile
+        qs = (
+            Appointment.objects.filter(provider=provider, client_phone=self.kwargs["phone"])
+            .select_related("service", "staff")
+            .order_by("-start_datetime")
+        )
+        if status_filter := self.request.query_params.get("status"):
+            qs = qs.filter(status=status_filter)
+        if date_from := self.request.query_params.get("date_from"):
+            qs = qs.filter(start_datetime__date__gte=date_from)
+        if date_to := self.request.query_params.get("date_to"):
+            qs = qs.filter(start_datetime__date__lte=date_to)
+        return qs
+
+
+class ClientNoteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, phone: str, *args: object, **kwargs: object) -> Response:
+        notes = request.user.provider_profile.client_notes.filter(client_phone=phone)
+        return Response(ClientNoteSerializer(notes, many=True).data)
+
+    def post(self, request: Request, phone: str, *args: object, **kwargs: object) -> Response:
+        serializer = ClientNoteCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        note = request.user.provider_profile.client_notes.create(
+            client_phone=phone,
+            client_user=Appointment.objects.filter(
+                provider=request.user.provider_profile,
+                client_phone=phone,
+            )
+            .exclude(client=None)
+            .values_list("client", flat=True)
+            .first(),
+            created_by=request.user,
+            note=serializer.validated_data["note"].strip(),
+        )
+        return Response(ClientNoteSerializer(note).data, status=status.HTTP_201_CREATED)
