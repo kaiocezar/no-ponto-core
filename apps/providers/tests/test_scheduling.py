@@ -18,6 +18,7 @@ from apps.providers.models import ProviderProfile, ScheduleBlock, WorkingHours
 from apps.providers.tests.factories import (
     ProviderProfileFactory,
     ScheduleBlockFactory,
+    StaffFactory,
     WorkingHoursFactory,
 )
 
@@ -556,3 +557,62 @@ class TestAvailabilityLogic:
         slot_hours_brt = [s.astimezone(BRT).hour for s in slots]
         # 08:00 BRT deve estar excluído (dentro do min_notice de 2h)
         assert 8 not in slot_hours_brt
+
+    @pytest.mark.django_db
+    def test_get_available_slots_with_staff_uses_staff_working_hours(self) -> None:
+        """
+        Scenario: Com staff informado, usa WorkingHours do staff quando existir.
+        """
+        from freezegun import freeze_time
+
+        from core.utils.availability import get_available_slots
+
+        profile = ProviderProfileFactory.create(
+            timezone="America/Sao_Paulo",
+            min_notice_hours=0,
+            max_advance_days=365,
+        )
+        staff = StaffFactory(provider=profile, role="practitioner", is_active=True)
+        # Estabelecimento: segunda 08h-10h
+        WorkingHoursFactory.create(
+            provider=profile,
+            staff=None,
+            weekday=0,
+            start_time=datetime.time(8, 0),
+            end_time=datetime.time(10, 0),
+            is_active=True,
+        )
+        # Profissional: segunda 14h-16h (sobrescreve para este staff)
+        WorkingHoursFactory.create(
+            provider=profile,
+            staff=staff,
+            weekday=0,
+            start_time=datetime.time(14, 0),
+            end_time=datetime.time(16, 0),
+            is_active=True,
+        )
+
+        date = datetime.date(2026, 4, 27)
+
+        with freeze_time("2026-04-27 00:00:00"):
+            slots_no_staff = get_available_slots(
+                provider=profile,
+                service_duration=60,
+                buffer_after=0,
+                date=date,
+                staff=None,
+            )
+            slots_with_staff = get_available_slots(
+                provider=profile,
+                service_duration=60,
+                buffer_after=0,
+                date=date,
+                staff=staff,
+            )
+
+        hours_establishment = [s.astimezone(BRT).hour for s in slots_no_staff]
+        hours_staff = [s.astimezone(BRT).hour for s in slots_with_staff]
+
+        assert 8 in hours_establishment
+        assert 14 in hours_staff
+        assert 8 not in hours_staff

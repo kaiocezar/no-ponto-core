@@ -20,6 +20,56 @@ class IsProviderOwner(BasePermission):
         return getattr(provider, "user_id", None) == request.user.pk
 
 
+class IsProviderStaffOwner(BasePermission):
+    """
+    Permite acesso apenas quando o usuário autenticado possui um Staff(role=owner)
+    ativo vinculado ao seu ProviderProfile.
+    """
+
+    message = "Apenas proprietários podem executar esta ação."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        from apps.providers.models import Staff  # import tardio para evitar circular
+
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        provider = getattr(user, "provider_profile", None)
+        if provider is None:
+            return False
+        return Staff.objects.filter(
+            provider=provider,
+            user=user,
+            role="owner",
+            is_active=True,
+        ).exists()
+
+
+class IsProviderStaffOwnerOrManager(BasePermission):
+    """
+    Permite acesso quando o usuário autenticado possui Staff com role owner
+    ou manager ativo no seu ProviderProfile.
+    """
+
+    message = "Apenas proprietários ou gerentes podem executar esta ação."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        from apps.providers.models import Staff  # import tardio para evitar circular
+
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        provider = getattr(user, "provider_profile", None)
+        if provider is None:
+            return False
+        return Staff.objects.filter(
+            provider=provider,
+            user=user,
+            role__in=("owner", "manager"),
+            is_active=True,
+        ).exists()
+
+
 class IsProviderUser(IsProviderOwner):
     """Alias para endpoints do prestador (mesmas regras que IsProviderOwner)."""
 

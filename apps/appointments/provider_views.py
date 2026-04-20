@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
+import uuid
 from typing import Any
 
 from django.db import transaction
@@ -83,6 +85,9 @@ class ProviderAppointmentListCreateView(ListCreateAPIView):
             qs = qs.filter(start_datetime__date__lte=d1)
         if st := params.get("status"):
             qs = qs.filter(status=st)
+        if sid := params.get("staff_id"):
+            with contextlib.suppress(ValueError):
+                qs = qs.filter(staff_id=uuid.UUID(sid))
         return qs
 
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -104,7 +109,7 @@ class ProviderAppointmentListCreateView(ListCreateAPIView):
                 {"start_datetime": "Informe data/hora com fuso horário (ISO 8601)."},
             )
 
-        end = start + datetime.timedelta(minutes=service.duration)
+        end = start + datetime.timedelta(minutes=service.duration_minutes)
         phone = normalize_phone_for_match(data["client_phone"])
 
         with transaction.atomic():

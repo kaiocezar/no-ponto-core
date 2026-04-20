@@ -26,7 +26,7 @@ class AppointmentCreateSerializer(serializers.Serializer[Any]):
 
 
 class _ServiceBriefSerializer(serializers.ModelSerializer[Service]):
-    duration_minutes = serializers.IntegerField(source="duration", read_only=True)
+    duration_minutes = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Service

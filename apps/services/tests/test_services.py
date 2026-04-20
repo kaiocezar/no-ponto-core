@@ -162,16 +162,16 @@ class TestProviderServiceList:
         assert "Meu Serviço" in names
         assert "Serviço Alheio" not in names
 
-    def test_inactive_services_not_shown_in_list(
+    def test_inactive_services_shown_in_list(
         self,
         authenticated_provider: APIClient,
         provider_profile: ProviderProfile,
     ) -> None:
         """
-        Scenario: Serviços inativos não aparecem na listagem
+        Scenario: Serviços inativos aparecem na listagem do prestador
           Given um serviço ativo e um inativo do mesmo prestador
           When GET /providers/me/services/
-          Then apenas o ativo aparece
+          Then ambos aparecem (painel mostra todos para gestão)
         """
         ServiceFactory(provider=provider_profile, name="Ativo", is_active=True)
         ServiceFactory(provider=provider_profile, name="Inativo", is_active=False)
@@ -180,7 +180,7 @@ class TestProviderServiceList:
 
         names = [s["name"] for s in response.json()]
         assert "Ativo" in names
-        assert "Inativo" not in names
+        assert "Inativo" in names
 
 
 @pytest.mark.django_db
@@ -242,48 +242,60 @@ class TestProviderServiceSoftDelete:
     """
     Feature: Remoção de serviços
     Como prestador autenticado
-    Quero remover serviços
-    Preservando o histórico de agendamentos anteriores
+    Quero remover serviços sem histórico de agendamentos fisicamente
+    E desativar serviços com agendamentos existentes
     """
 
-    def test_provider_deletes_service_soft_delete(
+    def test_provider_deletes_service_without_appointments_physically(
         self,
         authenticated_provider: APIClient,
         provider_profile: ProviderProfile,
     ) -> None:
         """
-        Scenario: Soft delete bem-sucedido
-          Given um serviço ativo do prestador autenticado
+        Scenario: DELETE físico sem agendamentos
+          Given um serviço ativo sem agendamentos
           When DELETE /providers/me/services/{id}/
-          Then resposta 204
-          And o serviço permanece no banco com is_active=False
+          Then resposta 204 e registro removido do banco
         """
         service = ServiceFactory(provider=provider_profile, is_active=True)
+        service_pk = service.pk
 
         response = authenticated_provider.delete(detail_url(service.pk))
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        service.refresh_from_db()
-        assert service.is_active is False
-        assert service.deactivated_at is not None
+        assert not Service.objects.filter(pk=service_pk).exists()
 
-    def test_deleted_service_remains_in_database(
+    def test_provider_delete_service_with_appointments_returns_400(
         self,
         authenticated_provider: APIClient,
         provider_profile: ProviderProfile,
     ) -> None:
         """
-        Scenario: Registro não é excluído fisicamente
-          Given um serviço ativo
-          When DELETE é chamado
-          Then o registro ainda existe no banco de dados
+        Scenario: DELETE com agendamentos retorna 400
+          Given um serviço com agendamentos existentes
+          When DELETE
+          Then 400 com code SERVICE_HAS_APPOINTMENTS
         """
+        from apps.appointments.models import Appointment, generate_public_id
+
         service = ServiceFactory(provider=provider_profile)
-        service_pk = service.pk
-
-        authenticated_provider.delete(detail_url(service_pk))
-
-        assert Service.objects.filter(pk=service_pk).exists()
+        Appointment.objects.create(
+            public_id=generate_public_id(),
+            provider=provider_profile,
+            service=service,
+            staff=None,
+            client=None,
+            client_name="Cliente",
+            client_phone="+5511999990002",
+            client_email="",
+            start_datetime="2030-01-01T10:00:00+00:00",
+            end_datetime="2030-01-01T11:00:00+00:00",
+            status=Appointment.Status.CONFIRMED,
+            origin=Appointment.Origin.ONLINE,
+        )
+        response = authenticated_provider.delete(detail_url(service.pk))
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["code"] == "SERVICE_HAS_APPOINTMENTS"
 
     def test_other_provider_cannot_delete_service_returns_404(
         self,
@@ -301,6 +313,27 @@ class TestProviderServiceSoftDelete:
         response = other_authenticated_provider.delete(detail_url(service.pk))
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_deactivate_endpoint_marks_service_inactive(
+        self,
+        authenticated_provider: APIClient,
+        provider_profile: ProviderProfile,
+    ) -> None:
+        """
+        Scenario: Soft deactivate via /deactivate/ endpoint
+          Given um serviço ativo com agendamentos (não pode ser excluído)
+          When POST /providers/me/services/{id}/deactivate/
+          Then 200 e is_active=False
+        """
+        service = ServiceFactory(provider=provider_profile, is_active=True)
+
+        url = f"/api/v1/providers/me/services/{service.pk}/deactivate/"
+        response = authenticated_provider.post(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        service.refresh_from_db()
+        assert service.is_active is False
+        assert service.deactivated_at is not None
 
 
 @pytest.mark.django_db

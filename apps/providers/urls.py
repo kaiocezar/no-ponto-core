@@ -18,12 +18,19 @@ from apps.providers.scheduling_views import (
     WorkingHoursDetailView,
     WorkingHoursListCreateView,
 )
+from apps.providers.staff_views import (
+    PublicProviderStaffView,
+    StaffDetailView,
+    StaffListCreateView,
+    StaffResendInviteView,
+)
 from apps.providers.views import (
     ProviderMeView,
     ProviderPublishView,
     ProviderUnpublishView,
     PublicProviderProfileView,
 )
+from apps.services.views import PublicProviderServicesView
 
 urlpatterns = [
     path("me/", ProviderMeView.as_view(), name="provider-me"),
@@ -60,6 +67,14 @@ urlpatterns = [
     path("me/services/", include("apps.services.urls")),
     path("me/publish/", ProviderPublishView.as_view(), name="provider-publish"),
     path("me/unpublish/", ProviderUnpublishView.as_view(), name="provider-unpublish"),
+    # Staff
+    path("me/staff/", StaffListCreateView.as_view(), name="provider-staff"),
+    path("me/staff/<uuid:pk>/", StaffDetailView.as_view(), name="provider-staff-detail"),
+    path(
+        "me/staff/<uuid:pk>/resend-invite/",
+        StaffResendInviteView.as_view(),
+        name="provider-staff-resend-invite",
+    ),
     # Working Hours
     path("me/working-hours/", WorkingHoursListCreateView.as_view(), name="provider-working-hours"),
     path(
@@ -77,11 +92,21 @@ urlpatterns = [
         ScheduleBlockDetailView.as_view(),
         name="provider-schedule-block-detail",
     ),
-    # Public availability
+    # Public — rotas antes do catch-all <slug>
     path(
         "<slug:slug>/availability/",
         ProviderAvailabilityView.as_view(),
         name="provider-availability",
+    ),
+    path(
+        "<slug:slug>/services/",
+        PublicProviderServicesView.as_view(),
+        name="provider-public-services",
+    ),
+    path(
+        "<slug:slug>/staff/",
+        PublicProviderStaffView.as_view(),
+        name="provider-public-staff",
     ),
     # /:slug deve ser a última para não conflitar com as anteriores
     path("<slug:slug>/", PublicProviderProfileView.as_view(), name="provider-public"),

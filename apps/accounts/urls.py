@@ -4,10 +4,12 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.accounts.views import (
+    AcceptInviteView,
     ClientMeView,
     CompleteProfileView,
     RegisterProviderView,
     RequestOTPView,
+    ValidateInviteView,
     VerifyOTPView,
 )
 
@@ -19,4 +21,6 @@ urlpatterns = [
     path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
     path("complete-profile/", CompleteProfileView.as_view(), name="complete-profile"),
     path("me/", ClientMeView.as_view(), name="accounts-me"),
+    path("accept-invite/", ValidateInviteView.as_view(), name="validate-invite"),
+    path("accept-invite/accept/", AcceptInviteView.as_view(), name="accept-invite"),
 ]

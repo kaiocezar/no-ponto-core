@@ -17,5 +17,5 @@ class ServiceFactory(DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Serviço {n}")
     description = "Descrição do serviço de teste."
     price = factory.Sequence(lambda n: f"{50 + n}.00")
-    duration = 60
+    duration_minutes = 60
     is_active = True

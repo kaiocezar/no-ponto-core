@@ -29,7 +29,7 @@ def published_booking_context(db: None) -> dict[str, object]:
     service = ServiceFactory(
         provider=provider,
         name="Corte",
-        duration=60,
+        duration_minutes=60,
         is_active=True,
         is_online=True,
     )
@@ -470,7 +470,8 @@ class TestAppointmentReschedule:
             status=Appointment.Status.CONFIRMED,
             start_datetime=timezone.now() + datetime.timedelta(days=3),
         )
-        appt.end_datetime = appt.start_datetime + datetime.timedelta(minutes=appt.service.duration)
+        delta = datetime.timedelta(minutes=appt.service.duration_minutes)
+        appt.end_datetime = appt.start_datetime + delta
         appt.save(update_fields=["end_datetime"])
 
         monkeypatch.setattr(
@@ -504,7 +505,7 @@ class TestAppointmentReschedule:
             start_datetime=timezone.now() + datetime.timedelta(days=3),
         )
         target_start = timezone.now() + datetime.timedelta(days=4, hours=1)
-        target_end = target_start + datetime.timedelta(minutes=appt.service.duration)
+        target_end = target_start + datetime.timedelta(minutes=appt.service.duration_minutes)
         AppointmentFactory(
             provider=appt.provider,
             service=appt.service,
@@ -553,7 +554,8 @@ class TestAppointmentReschedule:
             status=Appointment.Status.CONFIRMED,
             start_datetime=timezone.now() + datetime.timedelta(days=3),
         )
-        appt.end_datetime = appt.start_datetime + datetime.timedelta(minutes=appt.service.duration)
+        delta = datetime.timedelta(minutes=appt.service.duration_minutes)
+        appt.end_datetime = appt.start_datetime + delta
         appt.provider.min_notice_hours = 1
         appt.provider.save(update_fields=["min_notice_hours"])
         appt.save(update_fields=["end_datetime"])
@@ -612,7 +614,8 @@ class TestAppointmentReschedule:
             status=Appointment.Status.CONFIRMED,
             start_datetime=timezone.now() + datetime.timedelta(days=2),
         )
-        appt.end_datetime = appt.start_datetime + datetime.timedelta(minutes=appt.service.duration)
+        delta = datetime.timedelta(minutes=appt.service.duration_minutes)
+        appt.end_datetime = appt.start_datetime + delta
         appt.save(update_fields=["end_datetime"])
 
         cache_key = f"availability:{appt.provider_id}:{appt.start_datetime.date()}"
