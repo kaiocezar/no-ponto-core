@@ -11,7 +11,7 @@ from apps.services.models import Service
 
 
 class _ProviderServiceBriefSerializer(serializers.ModelSerializer[Service]):
-    duration_minutes = serializers.IntegerField(source="duration", read_only=True)
+    duration_minutes = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Service

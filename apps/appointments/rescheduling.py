@@ -36,7 +36,8 @@ def reschedule_appointment_atomically(
         if locked_appointment is None:
             return RescheduleResult(code="not_found")
 
-        new_end = new_start + datetime.timedelta(minutes=locked_appointment.service.duration)
+        dur = locked_appointment.service.duration_minutes
+        new_end = new_start + datetime.timedelta(minutes=dur)
 
         if locked_appointment.start_datetime <= timezone.now():
             return RescheduleResult(code="not_allowed")

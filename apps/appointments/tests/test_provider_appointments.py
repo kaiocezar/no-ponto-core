@@ -31,7 +31,7 @@ def provider_b() -> object:
 def service_a(provider_a: object) -> object:
     return ServiceFactory(
         provider=provider_a,
-        duration=60,
+        duration_minutes=60,
         price=Decimal("80.00"),
         is_active=True,
     )

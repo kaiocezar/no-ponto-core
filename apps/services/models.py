@@ -22,8 +22,8 @@ class Service(models.Model):
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    duration = models.PositiveIntegerField(
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    duration_minutes = models.PositiveIntegerField(
         default=60,
         help_text="Duração em minutos.",
     )
@@ -36,6 +36,17 @@ class Service(models.Model):
     buffer_after = models.PositiveIntegerField(
         default=0,
         help_text="Minutos de buffer após o término do serviço (afeta disponibilidade).",
+    )
+    color = models.CharField(max_length=7, null=True, blank=True)
+    currency = models.CharField(max_length=3, default="BRL")
+    requires_deposit = models.BooleanField(default=False)
+    deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    max_clients = models.PositiveIntegerField(default=1)
+    staff_members = models.ManyToManyField(
+        "providers.Staff",
+        through="providers.ServiceStaff",
+        related_name="services",
+        blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

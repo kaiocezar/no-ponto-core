@@ -211,7 +211,7 @@ class ProviderAvailabilityView(APIView):
             from apps.services.models import Service
 
             service = Service.objects.get(pk=service_id, provider=provider, is_active=True)
-            service_duration = service.duration
+            service_duration = service.duration_minutes
             buffer_after = service.buffer_after
         except Exception:
             return Response(

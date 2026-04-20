@@ -45,7 +45,7 @@ def _make_appt(
         provider=provider,
         name="Srv",
         price=Decimal("50"),
-        duration=30,
+        duration_minutes=30,
         is_active=True,
         is_online=True,
     )

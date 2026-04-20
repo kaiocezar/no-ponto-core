@@ -7,6 +7,59 @@ from django.db import models
 from django.utils.text import slugify
 
 
+class Staff(models.Model):
+    ROLE_CHOICES = [
+        ("owner", "Proprietário"),
+        ("manager", "Gerente"),
+        ("practitioner", "Profissional"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        "providers.ProviderProfile",
+        on_delete=models.CASCADE,
+        related_name="staff_members",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff_roles",
+    )
+    invite_email = models.EmailField(null=True, blank=True)
+    invite_token = models.UUIDField(null=True, blank=True)
+    invite_expires_at = models.DateTimeField(null=True, blank=True)
+    name = models.CharField(max_length=200)
+    avatar_url = models.URLField(max_length=500, null=True, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="practitioner")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "providers_staff"
+        verbose_name = "Membro da Equipe"
+        verbose_name_plural = "Membros da Equipe"
+        indexes = [
+            models.Index(fields=["provider", "is_active"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["invite_token"],
+                condition=models.Q(invite_token__isnull=False),
+                name="staff_invite_token_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(user__isnull=False) | models.Q(invite_email__isnull=False),
+                name="staff_must_have_user_or_email",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.provider})"
+
+
 class ServiceCategory(models.Model):
     """Categoria de serviço (ex: Saúde, Beleza, Consultoria)."""
 
@@ -170,7 +223,7 @@ class WorkingHours(models.Model):
         related_name="working_hours",
     )
     staff = models.ForeignKey(
-        "accounts.User",
+        "providers.Staff",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -214,7 +267,7 @@ class ScheduleBlock(models.Model):
         related_name="schedule_blocks",
     )
     staff = models.ForeignKey(
-        "accounts.User",
+        "providers.Staff",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -239,3 +292,27 @@ class ScheduleBlock(models.Model):
 
     def __str__(self) -> str:
         return f"Bloqueio {self.start_datetime} → {self.end_datetime}"
+
+
+class ServiceStaff(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    service = models.ForeignKey(
+        "services.Service",
+        on_delete=models.CASCADE,
+        related_name="service_staff",
+    )
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="service_assignments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "providers_service_staff"
+        unique_together = [("service", "staff")]
+        verbose_name = "Serviço por Profissional"
+        verbose_name_plural = "Serviços por Profissional"
+
+    def __str__(self) -> str:
+        return f"{self.staff} → {self.service}"

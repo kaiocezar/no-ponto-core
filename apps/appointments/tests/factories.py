@@ -31,7 +31,7 @@ class AppointmentFactory(DjangoModelFactory):
         lambda: timezone.now() + datetime.timedelta(days=10),
     )
     end_datetime = factory.LazyAttribute(
-        lambda o: o.start_datetime + datetime.timedelta(minutes=o.service.duration),
+        lambda o: o.start_datetime + datetime.timedelta(minutes=o.service.duration_minutes),
     )
     status = Appointment.Status.PENDING_CONFIRMATION
     origin = Appointment.Origin.ONLINE

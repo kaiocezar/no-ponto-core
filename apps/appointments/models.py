@@ -56,7 +56,7 @@ class Appointment(models.Model):
         related_name="appointments",
     )
     staff = models.ForeignKey(
-        "accounts.User",
+        "providers.Staff",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

@@ -61,13 +61,13 @@ def _collect_reschedule_slots(
         date = today + datetime.timedelta(days=day_offset)
         available = get_available_slots(
             provider=appointment.provider,
-            service_duration=appointment.service.duration,
+            service_duration=appointment.service.duration_minutes,
             buffer_after=appointment.service.buffer_after,
             date=date,
             staff=appointment.staff,
         )
         for start in available:
-            end = start + datetime.timedelta(minutes=appointment.service.duration)
+            end = start + datetime.timedelta(minutes=appointment.service.duration_minutes)
             slots.append({"start_datetime": start, "end_datetime": end})
             if len(slots) >= limit:
                 return slots
@@ -109,7 +109,7 @@ class AppointmentCreateView(APIView):
                 {"start_datetime": "Informe data/hora com fuso horário (ISO 8601)."},
             )
 
-        end = start + datetime.timedelta(minutes=service.duration)
+        end = start + datetime.timedelta(minutes=service.duration_minutes)
         client_phone = normalize_phone_for_match(request.user.phone_number or data["client_phone"])
         client_name = (request.user.full_name or data["client_name"]).strip()
 

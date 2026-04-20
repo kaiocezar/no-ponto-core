@@ -1,6 +1,9 @@
 """Views de autenticação e cadastro."""
 
+from __future__ import annotations
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import CreateAPIView, GenericAPIView, UpdateAPIView
 from rest_framework.permissions import AllowAny
@@ -100,3 +103,157 @@ class ClientMeView(UpdateAPIView):
 
     def patch(self, request: Request, *args: object, **kwargs: object) -> Response:
         return self.partial_update(request, *args, **kwargs)
+
+
+class ValidateInviteView(GenericAPIView):
+    """
+    GET /api/v1/accounts/accept-invite/?token=
+
+    Valida o token de convite sem consumi-lo.
+    Retorna dados do convite (nome, email, provider) ou 404/410.
+    Sem autenticação.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request, *args: object, **kwargs: object) -> Response:
+        from apps.providers.models import Staff
+
+        token = request.query_params.get("token", "").strip()
+        if not token:
+            return Response(
+                {"detail": "Parâmetro token é obrigatório."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            import uuid
+
+            staff = Staff.objects.select_related("provider", "user").get(
+                invite_token=uuid.UUID(token)
+            )
+        except (Staff.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "Convite não encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if staff.user is not None:
+            return Response(
+                {"detail": "Este convite já foi aceito."},
+                status=status.HTTP_410_GONE,
+            )
+
+        if staff.invite_expires_at and timezone.now() > staff.invite_expires_at:
+            return Response(
+                {"detail": "Este convite expirou. Solicite um novo ao administrador."},
+                status=status.HTTP_410_GONE,
+            )
+
+        return Response(
+            {
+                "staff_id": str(staff.pk),
+                "name": staff.name,
+                "invite_email": staff.invite_email,
+                "role": staff.role,
+                "provider_name": staff.provider.business_name or str(staff.provider),
+            }
+        )
+
+
+class AcceptInviteView(GenericAPIView):
+    """
+    POST /api/v1/accounts/accept-invite/
+
+    Aceita o convite de Staff:
+    - Se o usuário está autenticado via JWT, vincula o Staff ao usuário existente.
+    - Caso contrário, cria um novo User com email/senha informados e vincula.
+
+    Body: { token, full_name (opcional), password (opcional) }
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request, *args: object, **kwargs: object) -> Response:
+        import uuid as _uuid
+
+        from apps.accounts.models import User
+        from apps.providers.models import Staff
+
+        token_str = (request.data.get("token") or "").strip()
+        if not token_str:
+            return Response(
+                {"detail": "Campo token é obrigatório."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            staff = Staff.objects.select_related("provider", "user").get(
+                invite_token=_uuid.UUID(token_str)
+            )
+        except (Staff.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "Convite não encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if staff.user is not None:
+            return Response(
+                {"detail": "Este convite já foi aceito."},
+                status=status.HTTP_410_GONE,
+            )
+
+        if staff.invite_expires_at and timezone.now() > staff.invite_expires_at:
+            return Response(
+                {"detail": "Este convite expirou."},
+                status=status.HTTP_410_GONE,
+            )
+
+        with transaction.atomic():
+            # Usuário autenticado — vincula ao Staff existente
+            if request.user and request.user.is_authenticated:
+                user = request.user
+            else:
+                # Novo usuário — exige full_name e password
+                full_name = (request.data.get("full_name") or "").strip()
+                password = request.data.get("password", "")
+                if not full_name:
+                    return Response(
+                        {"detail": "Informe full_name para criar sua conta."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not password or len(str(password)) < 8:
+                    return Response(
+                        {"detail": "A senha deve ter ao menos 8 caracteres."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                # Verifica se já existe conta com esse email
+                email = staff.invite_email
+                existing = User.objects.filter(email=email).first() if email else None
+                if existing:
+                    # Vincula ao User existente sem alterar senha
+                    user = existing
+                else:
+                    user = User.objects.create_user(
+                        email=email,
+                        password=str(password),
+                        full_name=full_name,
+                        role=User.Role.STAFF,
+                        auth_provider=User.AuthProvider.EMAIL,
+                    )
+
+            staff.user = user
+            staff.invite_token = None
+            staff.invite_expires_at = None
+            staff.save(update_fields=["user", "invite_token", "invite_expires_at", "updated_at"])
+
+        refresh: RefreshToken = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "staff_id": str(staff.pk),
+                "provider_name": staff.provider.business_name or str(staff.provider),
+            },
+            status=status.HTTP_200_OK,
+        )

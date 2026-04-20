@@ -49,7 +49,7 @@ def _create_appointment(*, status: str = Appointment.Status.PENDING_CONFIRMATION
         provider=provider,
         name="Consulta",
         price=Decimal("100.00"),
-        duration=60,
+        duration_minutes=60,
         is_active=True,
         is_online=True,
     )
@@ -61,7 +61,7 @@ def _create_appointment(*, status: str = Appointment.Status.PENDING_CONFIRMATION
         client_name="Cliente Teste",
         client_phone="+5511988887777",
         start_datetime=start,
-        end_datetime=start + timedelta(minutes=service.duration),
+        end_datetime=start + timedelta(minutes=service.duration_minutes),
         status=status,
     )
 
