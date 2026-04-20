@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.appointments.views import (
     AppointmentCancelByCodeView,
+    AppointmentCompleteView,
     AppointmentCreateView,
     AppointmentLookupView,
     AppointmentRescheduleOptionsView,
@@ -27,5 +28,10 @@ urlpatterns = [
         "<uuid:pk>/reschedule/",
         AppointmentRescheduleView.as_view(),
         name="appointment-reschedule",
+    ),
+    path(
+        "<uuid:pk>/complete/",
+        AppointmentCompleteView.as_view(),
+        name="appointment-complete",
     ),
 ]

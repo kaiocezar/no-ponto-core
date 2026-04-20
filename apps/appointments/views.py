@@ -43,7 +43,8 @@ from apps.notifications.tasks import (
 from apps.providers.models import ProviderProfile
 from apps.services.models import Service
 from core.exceptions import ServiceUnavailableError, SlotNotAvailableError
-from core.permissions import IsClientUser
+from core.permissions import IsClientUser, IsProviderUser
+from apps.reviews.tasks import send_review_request
 
 
 def _collect_reschedule_slots(
@@ -349,3 +350,34 @@ class AppointmentRescheduleView(APIView):
             AppointmentLookupSerializer(new_appointment).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class AppointmentCompleteView(APIView):
+    """POST /api/v1/appointments/{id}/complete/."""
+
+    permission_classes = [IsProviderUser]
+
+    def post(self, request: Request, pk: str, *args: object, **kwargs: object) -> Response:
+        appointment = get_object_or_404(
+            Appointment.objects.filter(provider=request.user.provider_profile),
+            pk=pk,
+        )
+        if appointment.status not in (Appointment.Status.CONFIRMED, Appointment.Status.NO_SHOW):
+            return Response(
+                {
+                    "detail": "Status atual nao permite conclusao.",
+                    "code": "invalid_status_for_complete",
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        previous_status = appointment.status
+        with transaction.atomic():
+            appointment.status = Appointment.Status.COMPLETED
+            appointment.save(update_fields=["status"])
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status=previous_status,
+                to_status=Appointment.Status.COMPLETED,
+            )
+        send_review_request.apply_async(args=[str(appointment.pk)], countdown=7200)
+        return Response({"status": "completed"}, status=status.HTTP_200_OK)
